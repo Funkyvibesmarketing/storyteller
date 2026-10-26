@@ -1,9 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: "export",
   allowedDevOrigins: ["192.168.*.*"],
-  cacheComponents: true,
-  partialPrefetching: true,
   reactStrictMode: true,
   poweredByHeader: false,
   compress: true,

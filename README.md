@@ -20,6 +20,18 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Deploy to static hosting
+
+Build the static site with:
+
+```bash
+npm run build
+```
+
+Upload the **contents** of the generated `out` directory to your static host's document root. The site can then be served without Node.js. If a route such as `/about` returns 404, configure the host to serve its matching `.html` file.
+
+Static exports do not apply the response headers configured in `next.config.ts`; configure the equivalent security headers in your hosting provider or web server.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
