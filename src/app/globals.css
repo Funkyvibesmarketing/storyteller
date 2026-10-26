@@ -1,0 +1,117 @@
+@import "tailwindcss";
+@import "lenis/dist/lenis.css";
+
+@custom-variant pointer-fine (@media (hover: hover) and (pointer: fine));
+
+html.lenis.lenis-stopped:not(.lenis-autoToggle) {
+  overflow: hidden;
+}
+
+:root {
+  --background: #782b81;
+  --foreground: #ffffff;
+  --accent: #c6f432;
+  --ink: #0b0b0c;
+  --paper: #f2f0eb;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-accent: var(--accent);
+  --color-ink: var(--ink);
+  --color-paper: var(--paper);
+  --font-sans: var(--font-montserrat);
+  --font-mono: var(--font-geist-mono);
+  --font-serif: var(--font-instrument-serif);
+}
+
+@theme {
+  --text-fluid-xs: clamp(0.6875rem, 0.65rem + 0.15vw, 0.875rem);
+  --text-fluid-sm: clamp(0.8125rem, 0.75rem + 0.25vw, 1rem);
+  --text-fluid-base: clamp(0.9375rem, 0.88rem + 0.3vw, 1.125rem);
+  --text-fluid-lg: clamp(1.0625rem, 0.95rem + 0.45vw, 1.375rem);
+  --text-fluid-xl: clamp(1.125rem, 0.95rem + 0.75vw, 1.75rem);
+
+  --animate-drift: drift 16s ease-in-out infinite alternate;
+  --animate-scroll-line: scroll-line 2.2s cubic-bezier(0.7, 0, 0.3, 1) infinite;
+  --animate-bob: bob 3.5s linear infinite;
+  --animate-sound-bar: sound-bar 0.9s ease-in-out infinite;
+
+  @keyframes sound-bar {
+    0%,
+    100% {
+      transform: scaleY(0.35);
+    }
+    50% {
+      transform: scaleY(1);
+    }
+  }
+
+  @keyframes bob {
+    0%,
+    100% {
+      transform: translateY(15px);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
+  }
+
+  @keyframes drift {
+    0% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    100% {
+      transform: translate3d(-10%, 8%, 0) scale(1.15);
+    }
+  }
+
+  @keyframes scroll-line {
+    0% {
+      transform: translateY(-100%);
+    }
+    100% {
+      transform: translateY(100%);
+    }
+  }
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+    scrollbar-gutter: stable;
+  }
+
+
+  body {
+    @apply bg-background font-sans text-foreground;
+    overflow-x: clip;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    @apply bg-accent text-ink;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  a,
+  button {
+    touch-action: manipulation;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
