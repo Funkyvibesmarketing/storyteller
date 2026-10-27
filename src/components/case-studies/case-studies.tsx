@@ -5,6 +5,7 @@ import { useLenis } from "lenis/react";
 import { caseStudyAnchor, type CaseStudy } from "@/config/case-studies";
 import { gsap, ScrollTrigger, useGSAP } from "@/lib/gsap";
 import { cn } from "@/lib/utils";
+import { isCovered } from "@/lib/reveal-gate";
 import { Section } from "@/components/ui/section";
 import { createJourneyScene, type JourneyScene } from "./journey-scene";
 import {
@@ -78,7 +79,7 @@ export function CaseStudies({ studies }: { studies: CaseStudy[] }) {
         end: "bottom top",
         onToggle: (self) => {
           if (self.isActive) return;
-          sceneRef.current?.setVideo(activeRef.current, false);
+          sceneRef.current?.pauseAll();
           motion.wheel = 1;
           setWheelSpeed(1);
         },
@@ -123,7 +124,13 @@ export function CaseStudies({ studies }: { studies: CaseStudy[] }) {
       motion.travel = targetTravel();
 
       const tick = (_time: number, deltaMs: number) => {
-        if (!visible.isActive) return;
+        if (!visible.isActive || isCovered()) {
+          // Stay synced to the real scroll position while off screen or behind the
+          // preloader, so the scene never starts from a stale position (e.g. scroll
+          // restored on reload) and visibly rewinds.
+          motion.travel = targetTravel();
+          if (!visible.isActive) return;
+        }
         const delta = Math.min(deltaMs / 1000, 0.05);
         motion.time += delta;
 

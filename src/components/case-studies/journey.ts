@@ -1,8 +1,8 @@
 export const JOURNEY = {
   fov: 75,
   start: 60,
-  spacing: 120,
-  storyOffset: 60,
+  spacing: 100,
+  storyOffset: 45,
   read: 24,
   fadeStart: 50,
   fadeEnd: 60,

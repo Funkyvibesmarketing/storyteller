@@ -8,6 +8,10 @@ export function setCovered(value: boolean) {
   queue.clear();
 }
 
+export function isCovered() {
+  return covered;
+}
+
 export function whenRevealed(callback: () => void) {
   if (!covered) {
     callback();

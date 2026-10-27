@@ -1,4 +1,4 @@
-import type { Group, Material, Mesh, Object3D, PerspectiveCamera, VideoTexture, WebGLRenderer } from "three";
+import type { Group, Material, Mesh, MeshStandardMaterial, Object3D, PerspectiveCamera, VideoTexture, WebGLRenderer } from "three";
 import type { Text } from "troika-three-text";
 import type { CaseStudy } from "@/config/case-studies";
 import { caseDepth, clamp, fadeByDistance, JOURNEY, storyDepth } from "./journey";
@@ -8,8 +8,12 @@ import { drawStatusBar, loadStatusBarFont, STATUS_BAR } from "./status-bar";
 const MODEL_URL = "/GLB/iphone_14_pro_max.glb";
 const SCREEN_NODE = "YbXWdqEcjbfTKuN_0";
 const SCREEN_MATERIAL = "GFNYbWjyDVGUwJd";
+const ISLAND_MATERIAL = "YiceMpFVTpnmoaq";
 const FONT_REGULAR = "/fonts/montserrat-latin-400-normal.woff";
 const FONT_LIGHT = "/fonts/montserrat-latin-300-normal.woff";
+// How far the story video sits behind its text. One full fade length (10) means
+// the text finishes fading in just as the video starts.
+const MEDIA_BEHIND = 20;
 
 export type JourneyFrame = {
   camX: number;
@@ -25,6 +29,7 @@ export type JourneyScene = {
   resize: (width: number, height: number) => void;
   render: (frame: JourneyFrame) => void;
   setVideo: (index: number, playing: boolean) => void;
+  pauseAll: () => void;
   setMuted: (muted: boolean) => void;
   dispose: () => void;
 };
@@ -49,23 +54,6 @@ type CaseItem = {
 };
 
 const easeOutCubic = (value: number) => 1 - Math.pow(1 - value, 3);
-
-function drawRoundedMask(canvas: HTMLCanvasElement, aspect: number, radius: number) {
-  const height = 512;
-  const width = Math.round(height * aspect);
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext("2d");
-  if (context) {
-    context.fillStyle = "#000";
-    context.fillRect(0, 0, width, height);
-    context.fillStyle = "#fff";
-    context.beginPath();
-    context.roundRect(0, 0, width, height, radius * Math.min(width, height));
-    context.fill();
-  }
-  return canvas;
-}
 
 export async function createJourneyScene(canvas: HTMLCanvasElement, studies: CaseStudy[]): Promise<JourneyScene | null> {
   const [THREE, { GLTFLoader }, { RoomEnvironment }, { Text: TroikaText }] = await Promise.all([
@@ -151,9 +139,7 @@ export async function createJourneyScene(canvas: HTMLCanvasElement, studies: Cas
     }
   });
 
-  const mediaFits: (((aspect: number) => void) | null)[] = studies.map(() => null);
-  const mediaAspects = studies.map(() => 9 / 16);
-  const videoTextures: (VideoTexture | null)[] = videos.map((video, index) => {
+  const videoTextures: (VideoTexture | null)[] = videos.map((video) => {
     if (!video) return null;
     const texture = new THREE.VideoTexture(video);
     texture.colorSpace = THREE.SRGBColorSpace;
@@ -173,14 +159,20 @@ export async function createJourneyScene(canvas: HTMLCanvasElement, studies: Cas
       else visibleY = videoAspect / screenUv.aspect;
       texture.repeat.set(-visibleX / range, visibleY);
       texture.offset.set((1 - visibleX) / 2 + (visibleX * screenUv.max) / range, (1 - visibleY) / 2);
-      mediaAspects[index] = videoAspect;
-      mediaFits[index]?.(videoAspect);
     };
     if (video.readyState >= 1) queueMicrotask(applyCover);
     else video.addEventListener("loadedmetadata", applyCover, { once: true });
     disposables.push(texture);
     return texture;
   });
+
+  // Small front-facing parts at the top of the screen (Dynamic Island, front camera, speaker).
+  const isIslandPart = (mesh: Mesh) => {
+    if (mesh.name === SCREEN_NODE) return false;
+    mesh.geometry.computeBoundingBox();
+    const b = mesh.geometry.boundingBox;
+    return !!b && b.min.y > 14.9 && Math.abs(b.min.x) < 1.2 && b.min.z < -0.3 && b.max.x - b.min.x < 2.5;
+  };
 
   const createPhone = (index: number): Fader => {
     const model = source.clone(true);
@@ -194,6 +186,20 @@ export async function createJourneyScene(canvas: HTMLCanvasElement, studies: Cas
       if (mesh.name === SCREEN_NODE || original?.name === SCREEN_MATERIAL) screen = mesh;
       const material = original.clone();
       material.userData.alwaysTransparent = material.transparent;
+      if (isIslandPart(mesh)) {
+        // The Dynamic Island sits in the same plane as the screen; without this the
+        // video shows through it as a white pill. Draw it on top, matte black.
+        material.polygonOffset = true;
+        material.polygonOffsetFactor = -2;
+        material.polygonOffsetUnits = -2;
+        mesh.renderOrder = 3;
+        if (material.name === ISLAND_MATERIAL) {
+          const standard = material as MeshStandardMaterial;
+          standard.color.setRGB(0, 0, 0);
+          standard.metalness = 0;
+          standard.roughness = 0.6;
+        }
+      }
       mesh.material = material;
       materials.push(material);
     });
@@ -248,34 +254,7 @@ export async function createJourneyScene(canvas: HTMLCanvasElement, studies: Cas
     return { object: phone, materials, opacity: 1 };
   };
 
-  const createMedia = (index: number): Fader | null => {
-    const source = videoTextures[index];
-    if (!source) return null;
-    const texture = source.clone();
-    texture.repeat.set(1, 1);
-    texture.offset.set(0, 0);
-    const maskCanvas = document.createElement("canvas");
-    const mask = new THREE.CanvasTexture(maskCanvas);
-    const geometry = new THREE.PlaneGeometry(1, 1);
-    const material = new THREE.MeshBasicMaterial({
-      map: texture,
-      alphaMap: mask,
-      transparent: true,
-      toneMapped: false,
-    });
-    material.userData.alwaysTransparent = true;
-    const mesh = new THREE.Mesh(geometry, material);
-    const fit = (aspect: number) => {
-      drawRoundedMask(maskCanvas, aspect, 0.06);
-      mask.needsUpdate = true;
-      mesh.scale.x = mesh.scale.y * aspect;
-    };
-    fit(mediaAspects[index]);
-    mediaFits[index] = fit;
-    scene.add(mesh);
-    disposables.push(geometry, material, texture, mask);
-    return { object: mesh, materials: [material], opacity: 1 };
-  };
+  const createMedia = (index: number): Fader | null => (videoTextures[index] ? createPhone(index) : null);
 
   const createText = (
     value: string,
@@ -309,7 +288,7 @@ export async function createJourneyScene(canvas: HTMLCanvasElement, studies: Cas
       poses: [],
       speeds: (() => {
         const fast = Math.random() < 0.5 ? 0 : 1;
-        return [0, 1].map((p) => (p === fast ? -(0.28 + Math.random() * 0.14) : 0.22 + Math.random() * 0.14));
+        return [0, 1].map((p) => (p === fast ? -(0.3 + Math.random() * 0.1) : -(0.1 + Math.random() * 0.08)));
       })(),
       media,
       mediaBase: { x: 0, y: 0 },
@@ -358,12 +337,15 @@ export async function createJourneyScene(canvas: HTMLCanvasElement, studies: Cas
         item.body.anchorX = "center";
         item.body.anchorY = "top";
         item.body.textAlign = "center";
-        item.body.fontSize = 0.62;
+        // Mobile: the video phone is the main visual — big and centred in the upper
+        // part of the screen, with the story text below, slightly overlapping it.
+        item.body.fontSize = item.media ? 0.56 : 0.62;
         item.body.maxWidth = 13.4;
-        item.body.position.set(0, item.media ? -1.5 : 4, storyZ);
-        item.mediaBase = { x: 3.2 * s, y: 7.6 };
-        if (item.media) item.media.object.scale.set(10 * mediaAspects[index], 10, 1);
-        item.media?.object.position.set(item.mediaBase.x, item.mediaBase.y, storyZ + 6);
+        item.body.position.set(0, item.media ? -3 : 4, storyZ);
+        item.mediaBase = { x: 0.6 * s, y: 9 };
+        item.media?.object.scale.setScalar(37);
+        item.media?.object.rotation.set(0, -0.08 * s, 0);
+        item.media?.object.position.set(item.mediaBase.x, item.mediaBase.y, storyZ - MEDIA_BEHIND);
       } else {
         item.title.fontSize = 3.4 * size;
         item.title.maxWidth = 40 * scale;
@@ -377,10 +359,11 @@ export async function createJourneyScene(canvas: HTMLCanvasElement, studies: Cas
         item.body.textAlign = textSide === 0 ? "center" : "left";
         item.body.fontSize = 0.85 * size;
         item.body.maxWidth = 21 * scale;
-        item.body.position.set(textSide * 1.5 * scale, 0, storyZ);
-        item.mediaBase = { x: 9 * scale * s, y: 0.5 };
-        if (item.media) item.media.object.scale.set(19 * size * mediaAspects[index], 19 * size, 1);
-        item.media?.object.position.set(item.mediaBase.x, item.mediaBase.y, storyZ + 2);
+        item.body.position.set(textSide === 0 ? 0 : 2.5 * scale * s, 0, storyZ);
+        item.mediaBase = { x: 8.3 * scale * s, y: 2.5 };
+        item.media?.object.scale.setScalar(30 * size);
+        item.media?.object.rotation.set(0, -0.18 * s, 0);
+        item.media?.object.position.set(item.mediaBase.x, item.mediaBase.y, storyZ - MEDIA_BEHIND);
       }
 
       item.phones.forEach((phone, p) => {
@@ -443,6 +426,25 @@ export async function createJourneyScene(canvas: HTMLCanvasElement, studies: Cas
     return fadeByDistance(ahead);
   };
 
+  // A video plays while any phone showing it is on screen (so it never freezes
+  // mid zoom), plus the active case's video during its reading window.
+  // Only the active case may have sound.
+  const shown = studies.map(() => false);
+  let activePlaying = false;
+  const syncVideos = () => {
+    videos.forEach((video, i) => {
+      if (!video) return;
+      const active = i === activeVideo;
+      if (isCaseVideoReady(video) && (shown[i] || (active && activePlaying))) {
+        const silent = active ? muted : true;
+        if (video.muted !== silent) video.muted = silent;
+        if (video.paused) video.play().catch(() => {});
+      } else if (!video.paused) {
+        video.pause();
+      }
+    });
+  };
+
   return {
     resize: (width, height) => {
       if (!width || !height) return;
@@ -461,7 +463,7 @@ export async function createJourneyScene(canvas: HTMLCanvasElement, studies: Cas
         camera.fov = fov;
         camera.updateProjectionMatrix();
       }
-      camera.rotation.z = away * away * 0.42;
+      camera.rotation.z = 0;
       const glow = clamp(entry * 7, 0, 1) * clamp(1 - entry * 1.15, 0, 1);
       streaks.visible = glow > 0.003;
       streakMaterial.opacity = glow * clamp(0.45 + speed * 0.06, 0, 1);
@@ -476,14 +478,16 @@ export async function createJourneyScene(canvas: HTMLCanvasElement, studies: Cas
           setOpacity(phone, fadeFor(z));
           if (!phone.object.visible) return;
           const wave = time * 0.9 + index * 1.7 + p * 2.3;
-          const spin = index === 0 ? away : 0;
-          const turn = p === 0 ? -1 : 1;
-          phone.object.position.x = pose.x * (1 + spin * 1.5);
-          phone.object.position.y = pose.y + Math.sin(wave) * 0.35 + spin * turn * 6;
+          // Intro for the first case: phones start small and upright in the screen centre,
+          // then zoom up and slide out to their resting poses.
+          const out = index === 0 ? arrive : 1;
+          phone.object.position.x = pose.x * out;
+          phone.object.position.y = pose.y * out + Math.sin(wave) * 0.35 * out;
+          phone.object.scale.setScalar(pose.scale * (0.3 + 0.7 * out));
           phone.object.rotation.set(
-            pose.rx + Math.sin(wave * 0.8) * 0.04 + spin * 0.9,
-            pose.ry + Math.cos(wave * 0.7) * 0.05 + spin * turn * 1.6,
-            pose.rz + Math.sin(wave * 0.6) * 0.03 + spin * turn * Math.PI * 1.5,
+            (pose.rx + Math.sin(wave * 0.8) * 0.04) * out,
+            (pose.ry + Math.cos(wave * 0.7) * 0.05) * out,
+            (pose.rz + Math.sin(wave * 0.6) * 0.03) * out,
           );
         });
 
@@ -494,6 +498,8 @@ export async function createJourneyScene(canvas: HTMLCanvasElement, studies: Cas
           }
         }
 
+        shown[index] = item.phones.some((phone) => phone.object.visible) || !!item.media?.object.visible;
+
         if (index === 0) item.title.scale.setScalar(0.45 + 0.55 * arrive);
 
         [item.title, item.body].forEach((text) => {
@@ -503,6 +509,7 @@ export async function createJourneyScene(canvas: HTMLCanvasElement, studies: Cas
         });
       });
 
+      syncVideos();
       renderer.render(scene, camera);
     },
     setVideo: (index, playing) => {
@@ -510,15 +517,13 @@ export async function createJourneyScene(canvas: HTMLCanvasElement, studies: Cas
         activeVideo = index;
         warm(index);
       }
-      videos.forEach((video, i) => {
-        if (!video) return;
-        if (i === activeVideo && playing && isCaseVideoReady(video)) {
-          video.muted = muted;
-          if (video.paused) video.play().catch(() => {});
-        } else if (!video.paused) {
-          video.pause();
-        }
-      });
+      activePlaying = playing;
+      syncVideos();
+    },
+    pauseAll: () => {
+      shown.fill(false);
+      activePlaying = false;
+      syncVideos();
     },
     setMuted: (value) => {
       muted = value;
