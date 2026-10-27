@@ -16,14 +16,14 @@ export const caseStudies: CaseStudy[] = [
       "In order for this not to be perceived as anything other than a pay it forward project, we chose to tell the story in a documentary style to include stories of the owners - two Rochdale lads who share a deep love and pride for the place they call home, as well as stories of people within the borough who are on their house buying journey.",
       "This is David's intro video to that series.",
     ],
-    video: "/video/1. David - My Town Intro.mp4",
+    video: "https://res.cloudinary.com/aeh9u82k/video/upload/v1793105014/1._David_-_My_Town_Intro.mp4",
   },
   {
     slug: "case-study-two",
     title: "",
     category: "Documentary series",
     paragraphs: ["Case study content coming soon."],
-    video: "/video/2. Dean - My Town Intro.mp4",
+    video: "https://res.cloudinary.com/aeh9u82k/video/upload/v1793105372/2._Dean_-_My_Town_Intro.mp4",
   },
   {
     slug: "case-study-three",

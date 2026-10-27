@@ -2,6 +2,7 @@ import type { Group, Material, Mesh, Object3D, PerspectiveCamera, VideoTexture, 
 import type { Text } from "troika-three-text";
 import type { CaseStudy } from "@/config/case-studies";
 import { caseDepth, clamp, fadeByDistance, JOURNEY, storyDepth } from "./journey";
+import { getCaseVideo, isCaseVideoReady, loadCaseVideo } from "@/lib/case-video";
 import { drawStatusBar, loadStatusBarFont, STATUS_BAR } from "./status-bar";
 
 const MODEL_URL = "/GLB/iphone_14_pro_max.glb";
@@ -49,18 +50,6 @@ type CaseItem = {
 
 const easeOutCubic = (value: number) => 1 - Math.pow(1 - value, 3);
 
-function createVideo(src: string) {
-  const video = document.createElement("video");
-  video.src = encodeURI(src);
-  video.muted = true;
-  video.loop = true;
-  video.playsInline = true;
-  video.preload = "none";
-  video.setAttribute("webkit-playsinline", "true");
-  video.disablePictureInPicture = true;
-  return video;
-}
-
 function drawRoundedMask(canvas: HTMLCanvasElement, aspect: number, radius: number) {
   const height = 512;
   const width = Math.round(height * aspect);
@@ -105,7 +94,7 @@ export async function createJourneyScene(canvas: HTMLCanvasElement, studies: Cas
 
   const camera: PerspectiveCamera = new THREE.PerspectiveCamera(JOURNEY.fov, 1, 0.1, 200);
   const disposables: { dispose: () => void }[] = [environment, pmrem];
-  const videos = studies.map((study) => (study.video ? createVideo(study.video) : null));
+  const videos = studies.map((study) => (study.video ? getCaseVideo(study.video) : null));
   let muted = true;
   let activeVideo = -1;
   let mobile = false;
@@ -408,11 +397,8 @@ export async function createJourneyScene(canvas: HTMLCanvasElement, studies: Cas
 
   const warm = (index: number) => {
     [index, index + 1].forEach((i) => {
-      const video = videos[i];
-      if (video && video.preload !== "auto") {
-        video.preload = "auto";
-        video.load();
-      }
+      const src = studies[i]?.video;
+      if (src) loadCaseVideo(src, i === index);
     });
   };
   warm(0);
@@ -523,12 +509,10 @@ export async function createJourneyScene(canvas: HTMLCanvasElement, studies: Cas
       if (index !== activeVideo) {
         activeVideo = index;
         warm(index);
-        const video = videos[index];
-        if (video) video.currentTime = 0;
       }
       videos.forEach((video, i) => {
         if (!video) return;
-        if (i === activeVideo && playing) {
+        if (i === activeVideo && playing && isCaseVideoReady(video)) {
           video.muted = muted;
           if (video.paused) video.play().catch(() => {});
         } else if (!video.paused) {
@@ -548,8 +532,6 @@ export async function createJourneyScene(canvas: HTMLCanvasElement, studies: Cas
       videos.forEach((video) => {
         if (!video) return;
         video.pause();
-        video.removeAttribute("src");
-        video.load();
       });
       disposables.forEach((item) => item.dispose());
       renderer.dispose();

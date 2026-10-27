@@ -1,14 +1,30 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { ReactLenis, useLenis } from "lenis/react";
 import { gsap, ScrollTrigger } from "@/lib/gsap";
 
+if (typeof window !== "undefined" && "scrollRestoration" in history) history.scrollRestoration = "manual";
+
 function GsapLenisSync() {
   const lenis = useLenis();
+  const started = useRef(false);
 
   useEffect(() => {
     if (!lenis) return;
+
+    const toTop = () => {
+      window.scrollTo(0, 0);
+      lenis.scrollTo(0, { immediate: true, force: true });
+    };
+    const toTopAfterLoad = () => requestAnimationFrame(toTop);
+
+    if (!started.current) {
+      started.current = true;
+      if (window.location.hash) history.replaceState(history.state, "", window.location.pathname + window.location.search);
+      toTop();
+      if (document.readyState !== "complete") window.addEventListener("load", toTopAfterLoad, { once: true });
+    }
 
     lenis.on("scroll", ScrollTrigger.update);
 
@@ -20,6 +36,7 @@ function GsapLenisSync() {
     document.fonts?.ready.then(() => ScrollTrigger.refresh());
 
     return () => {
+      window.removeEventListener("load", toTopAfterLoad);
       lenis.off("scroll", ScrollTrigger.update);
       gsap.ticker.remove(update);
     };
@@ -29,10 +46,6 @@ function GsapLenisSync() {
 }
 
 export function SmoothScroll({ children }: { children: ReactNode }) {
-  useEffect(() => {
-    if ("scrollRestoration" in history) history.scrollRestoration = "manual";
-  }, []);
-
   return (
     <ReactLenis
       root

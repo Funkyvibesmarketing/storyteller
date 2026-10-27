@@ -4,11 +4,21 @@ import { useEffect, useRef } from "react";
 import { useLenis } from "lenis/react";
 import { gsap, useGSAP } from "@/lib/gsap";
 import { setCovered } from "@/lib/reveal-gate";
+import { primeCaseVideo } from "@/lib/case-video";
+import { caseStudies } from "@/config/case-studies";
 
 const COLUMNS = 12;
 
 const wordClass =
   "whitespace-nowrap text-center text-[clamp(2rem,0.82rem+5.566vw,9rem)] font-normal leading-normal tracking-[clamp(0.4em,5.73vw,0.95em)] indent-[3%] [text-box:trim-both_cap_alphabetic]";
+
+const VIDEO_WAIT = 8000;
+
+function whenVideoReady() {
+  const first = caseStudies.find((study) => study.video)?.video;
+  if (!first || !document.getElementById("case-studies")) return Promise.resolve();
+  return primeCaseVideo(first, VIDEO_WAIT);
+}
 
 function whenPageReady() {
   const loaded =
@@ -16,7 +26,7 @@ function whenPageReady() {
       ? Promise.resolve()
       : new Promise<void>((resolve) => window.addEventListener("load", () => resolve(), { once: true }));
   const fonts = document.fonts?.ready.then(() => undefined) ?? Promise.resolve();
-  return Promise.all([loaded, fonts]);
+  return Promise.all([loaded, fonts, whenVideoReady()]);
 }
 
 export function Preloader() {
@@ -105,6 +115,14 @@ export function Preloader() {
             stagger: { each: 0.05, from: "center" },
           },
           "lift",
+        )
+        .call(
+          () => {
+            window.scrollTo(0, 0);
+            lenisRef.current?.scrollTo(0, { immediate: true, force: true });
+          },
+          undefined,
+          "exit",
         )
         .call(() => setCovered(false), undefined, "lift+=0.55")
         .to(root.current, { opacity: 0, duration: 0.3 }, "-=0.35");
