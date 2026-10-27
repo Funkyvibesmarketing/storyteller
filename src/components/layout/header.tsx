@@ -57,7 +57,7 @@ export function Header() {
   }, [open]);
 
   return (
-    <header className="pointer-events-none fixed inset-x-0 top-0 z-50 flex items-start justify-end px-[clamp(1.375rem,0.7rem+2.4vw,3rem)] py-[clamp(1.25rem,1.08vw,2rem)] text-white">
+    <header className="pointer-events-none fixed inset-x-0 top-0 z-50 flex items-start justify-end transition-[opacity,translate] duration-500 [html[data-journey=flying]_&]:-translate-y-4 [html[data-journey=flying]_&]:opacity-0 [html[data-journey=flying]_&_*]:pointer-events-none! px-[clamp(1.375rem,0.7rem+2.4vw,3rem)] py-[clamp(1.25rem,1.08vw,2rem)] text-white">
 
       <div ref={menu} className="pointer-events-auto relative">
         <button
@@ -99,7 +99,7 @@ export function Header() {
                   >
                     <span className="font-mono text-fluid-xs opacity-60">0{i + 1}</span>
                     <span className="flex-1">
-                      <span className="block text-fluid-base font-medium leading-tight">{study.title}</span>
+                      <span className="block text-fluid-base font-medium leading-tight">{study.title || study.category}</span>
                       <span className="block text-fluid-xs uppercase tracking-[2px] opacity-60">{study.category}</span>
                     </span>
                     <span

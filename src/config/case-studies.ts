@@ -9,7 +9,7 @@ export type CaseStudy = {
 export const caseStudies: CaseStudy[] = [
   {
     slug: "hy-group-rochdale-100",
-    title: "HY Group : The Rochdale 100 initiative",
+    title: "",
     category: "Documentary series",
     paragraphs: [
       "Following the increasing momentum of the For Generations To Come movement, the Rochdale 100 initiative was born, aimed at supporting first time buyers in Rochdale onto the property ladder.",
@@ -20,26 +20,26 @@ export const caseStudies: CaseStudy[] = [
   },
   {
     slug: "case-study-two",
-    title: "Case Study Two",
+    title: "",
     category: "Documentary series",
     paragraphs: ["Case study content coming soon."],
     video: "/video/2. Dean - My Town Intro.mp4",
   },
   {
     slug: "case-study-three",
-    title: "Case Study Three",
+    title: "",
     category: "Social Media",
     paragraphs: ["Case study content coming soon."],
   },
   {
     slug: "case-study-four",
-    title: "Case Study Four",
+    title: "",
     category: "Film & Photo",
     paragraphs: ["Case study content coming soon."],
   },
   {
     slug: "case-study-five",
-    title: "Case Study Five",
+    title: "",
     category: "Strategy",
     paragraphs: ["Case study content coming soon."],
   },

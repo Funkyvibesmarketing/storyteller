@@ -7,6 +7,7 @@ import { gsap, MOBILE, MOTION_OK, useGSAP } from "@/lib/gsap";
 import { whenRevealed } from "@/lib/reveal-gate";
 import { backgroundState } from "@/lib/background-state";
 import { Section } from "@/components/ui/section";
+import { caseStudies, caseStudyAnchor } from "@/config/case-studies";
 
 const subhead = "We tell";
 const headline = ["Your", "Story"];
@@ -71,7 +72,9 @@ export function Hero() {
   const scrollForward = () => {
     const section = root.current;
     if (!section) return;
-    lenis?.scrollTo(section.offsetTop + section.offsetHeight, { duration: 3.2 });
+    const first = caseStudies[0] ? document.getElementById(caseStudyAnchor(caseStudies[0].slug)) : null;
+    if (first) lenis?.scrollTo(first, { duration: 3.2 });
+    else lenis?.scrollTo(section.offsetTop + section.offsetHeight, { duration: 3.2 });
   };
 
   return (
