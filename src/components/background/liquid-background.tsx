@@ -60,6 +60,12 @@ export function LiquidBackground() {
         uColor2: { value: new THREE.Color(config.color2) },
         uColor3: { value: new THREE.Color(config.color3) },
         uColor4: { value: new THREE.Color(config.color4) },
+        uFrom1: { value: new THREE.Color(config.color1) },
+        uFrom2: { value: new THREE.Color(config.color2) },
+        uFrom3: { value: new THREE.Color(config.color3) },
+        uFrom4: { value: new THREE.Color(config.color4) },
+        uColorMix: { value: 1 },
+        uWashDir: { value: new THREE.Vector2(1, 0) },
         uStop1: { value: config.stop1 },
         uStop2: { value: config.stop2 },
         uStop3: { value: config.stop3 },
@@ -133,6 +139,20 @@ export function LiquidBackground() {
       const scroll = { current: 0, last: 0, boost: 0 };
       scroll.current = scroll.last = window.scrollY / window.innerHeight;
 
+      const defaultPalette = [config.color1, config.color2, config.color3, config.color4] as const;
+      const colorUniforms = [uniforms.uColor1, uniforms.uColor2, uniforms.uColor3, uniforms.uColor4];
+      const fromUniforms = [uniforms.uFrom1, uniforms.uFrom2, uniforms.uFrom3, uniforms.uFrom4];
+      let paletteKey = defaultPalette.join();
+      // Each colour change washes in from the next side: left → right, right → left,
+      // top → bottom, bottom → top, then round again.
+      const washDirections = [
+        [1, 0],
+        [-1, 0],
+        [0, -1],
+        [0, 1],
+      ] as const;
+      let washCount = 0;
+
       const tick = (_time: number, deltaMs: number) => {
         const delta = Math.min(deltaMs / 1000, 0.05);
         const position = window.scrollY / window.innerHeight;
@@ -146,6 +166,25 @@ export function LiquidBackground() {
         uniforms.uTime.value += delta * (1 + scroll.boost * scrollMotion.boostStrength);
         uniforms.uScroll.value = scroll.current * scrollMotion.drift;
         uniforms.uZoom.value += (backgroundState.zoom - uniforms.uZoom.value) * (1 - Math.exp(-delta * 10));
+
+        // Case-study colour change: the new palette washes across as a wave (~1.8s).
+        const palette = backgroundState.colors ?? defaultPalette;
+        const key = palette.join();
+        if (key !== paletteKey) {
+          paletteKey = key;
+          // Start from what is on screen now (mid-wave counts as the colours it was heading to
+          // once more than half way).
+          const fromNew = uniforms.uColorMix.value > 0.5;
+          fromUniforms.forEach((from, i) => from.value.copy(fromNew ? colorUniforms[i].value : from.value));
+          colorUniforms.forEach((uniform, i) => uniform.value.set(palette[i]));
+          uniforms.uColorMix.value = 0;
+          const [wx, wy] = washDirections[washCount % washDirections.length];
+          uniforms.uWashDir.value.set(wx, wy);
+          washCount += 1;
+        }
+        if (uniforms.uColorMix.value < 1) {
+          uniforms.uColorMix.value = Math.min(1, uniforms.uColorMix.value + delta / 2.4);
+        }
 
         if (pointerEnabled && targetPointer && currPointer) {
           const lerpBlend = 1 - Math.exp(-delta * 30);
@@ -207,6 +246,7 @@ export function LiquidBackground() {
   return (
     <canvas
       ref={canvasRef}
+      data-liquid-bg
       aria-hidden="true"
       className="pointer-events-none fixed inset-x-0 top-0 -z-10 h-lvh w-full opacity-0"
     />

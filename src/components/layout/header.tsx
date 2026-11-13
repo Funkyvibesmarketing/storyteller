@@ -12,6 +12,43 @@ const glassBox =
 
 export function Header() {
   const [open, setOpen] = useState(false);
+  // The case study currently on screen (from the journey), highlighted in the menu.
+  const [current, setCurrent] = useState(-1);
+  useEffect(() => {
+    const onCase = (event: Event) => setCurrent((event as CustomEvent<number>).detail);
+    window.addEventListener("journeycase", onCase);
+    return () => window.removeEventListener("journeycase", onCase);
+  }, []);
+
+  // First visit only: open the menu by itself for a moment so people see the case
+  // studies are in there, then close it again — unless they start using it.
+  const [preview, setPreview] = useState(false);
+  const touched = useRef(false);
+  useEffect(() => {
+    const PREVIEW_KEY = "storyteller:menu-previewed";
+    let timer = 0;
+    const onPreview = () => {
+      try {
+        if (localStorage.getItem(PREVIEW_KEY)) return;
+        localStorage.setItem(PREVIEW_KEY, "1");
+      } catch {
+        // Storage blocked — still show the preview once for this page view.
+      }
+      touched.current = false;
+      setPreview(true);
+      setOpen(true);
+      timer = window.setTimeout(() => {
+        setPreview(false);
+        if (!touched.current) setOpen(false);
+      }, 3500);
+    };
+    window.addEventListener("menupreview", onPreview);
+    return () => {
+      window.removeEventListener("menupreview", onPreview);
+      window.clearTimeout(timer);
+    };
+  }, []);
+  const highlighted = preview && current < 0 ? 0 : current;
   const menu = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
@@ -57,16 +94,34 @@ export function Header() {
   }, [open]);
 
   return (
-    <header className="pointer-events-none fixed inset-x-0 top-0 z-50 flex items-start justify-end transition-[opacity,translate] duration-500 [html[data-journey=flying]_&]:-translate-y-4 [html[data-journey=flying]_&]:opacity-0 [html[data-journey=flying]_&_*]:pointer-events-none! px-[clamp(1.375rem,0.7rem+2.4vw,3rem)] py-[clamp(1.25rem,1.08vw,2rem)] text-white">
+    <header className="pointer-events-none fixed inset-x-0 top-0 z-50 flex items-start justify-end px-[clamp(1.375rem,0.7rem+2.4vw,3rem)] py-[clamp(1.25rem,1.08vw,2rem)] text-white">
 
-      <div ref={menu} className="pointer-events-auto relative">
+      <div
+        ref={menu}
+        onPointerEnter={() => (touched.current = true)}
+        onFocus={() => (touched.current = true)}
+        className="pointer-events-auto relative flex items-center gap-[clamp(0.75rem,1.25vw,1.5rem)]"
+      >
+        {/* Figma: "Case Studies" label beside the button while the menu is open. */}
+        <span
+          aria-hidden="true"
+          className={cn(
+            "whitespace-nowrap text-[clamp(0.875rem,0.94vw,1.25rem)] font-normal leading-none tracking-[0.15em] transition-[opacity,translate] duration-500 [text-box:trim-both_cap_alphabetic] max-md:hidden",
+            open ? "translate-x-0 opacity-100" : "pointer-events-none translate-x-3 opacity-0",
+          )}
+        >
+          Case Studies
+        </span>
         <button
           ref={button}
           type="button"
           aria-expanded={open}
           aria-controls="case-study-menu"
           aria-label={open ? "Close case studies menu" : "Open case studies menu"}
-          onClick={() => setOpen((value) => !value)}
+          onClick={() => {
+            setPreview(false);
+            setOpen((value) => !value);
+          }}
           className={cn(glassBox, "p-[clamp(0.6875rem,1.56vw,2rem)] transition-colors hover:bg-white/20")}
         >
           <Image
@@ -85,9 +140,11 @@ export function Header() {
           ref={panel}
           id="case-study-menu"
           inert={!open}
-          className="invisible absolute right-0 top-full mt-[clamp(0.5rem,0.8vw,1rem)] w-[clamp(16rem,22vw,28rem)] max-w-[calc(100vw-2.75rem)] origin-top-right rounded-2xl border border-white/40 bg-white/10 p-2 shadow-[0_18px_40px_0_rgba(0,0,0,0.25)] backdrop-blur-xl"
+          className="invisible absolute right-0 top-full mt-[clamp(0.5rem,0.8vw,1rem)] w-[clamp(15rem,20vw,26rem)] max-w-[calc(100vw-2.75rem)] origin-top-right rounded-xl border border-white/40 bg-white/10 p-[clamp(0.375rem,0.45vw,0.625rem)] shadow-[0_18px_40px_0_rgba(0,0,0,0.25)] backdrop-blur-xl"
         >
-          <p className="px-4 pb-2 pt-3 text-fluid-xs uppercase tracking-[4px] opacity-70">Case studies</p>
+          <p className="px-[clamp(0.375rem,0.45vw,0.625rem)] pb-[clamp(0.5rem,0.6vw,0.875rem)] pt-[clamp(0.25rem,0.3vw,0.5rem)] text-[clamp(0.625rem,0.6vw,0.875rem)] leading-none tracking-[0.2em] opacity-70">
+            Case Studies
+          </p>
           <nav aria-label="Case studies">
             <ul>
               {caseStudies.map((study, i) => (
@@ -95,16 +152,21 @@ export function Header() {
                   <TransitionLink
                     href={`/#${caseStudyAnchor(study.slug)}`}
                     onClick={() => setOpen(false)}
-                    className="case-link group flex items-center gap-4 rounded-xl px-4 py-3 transition-colors hover:bg-white/10"
+                    aria-current={i === current ? "true" : undefined}
+                    className={cn(
+                      "case-link group flex items-center gap-3 rounded-md px-[clamp(0.375rem,0.45vw,0.625rem)] py-[clamp(0.5rem,0.6vw,0.875rem)] text-[clamp(0.8125rem,0.83vw,1.125rem)] leading-none tracking-[0.15em] transition-colors duration-300",
+                      i === highlighted ? "bg-white text-[#6b1d6e]" : "hover:bg-white hover:text-[#6b1d6e]",
+                    )}
                   >
-                    <span className="font-mono text-fluid-xs opacity-60">0{i + 1}</span>
-                    <span className="flex-1">
-                      <span className="block text-fluid-base font-medium leading-tight">{study.title || study.category}</span>
-                      <span className="block text-fluid-xs uppercase tracking-[2px] opacity-60">{study.category}</span>
+                    <span className="flex-1 whitespace-nowrap [text-box:trim-both_cap_alphabetic]">
+                      {String(i + 1).padStart(2, "0")} {study.client}
                     </span>
                     <span
                       aria-hidden="true"
-                      className="transition-transform duration-300 group-hover:translate-x-1"
+                      className={cn(
+                        "transition-[opacity,translate] duration-300",
+                        i === highlighted ? "opacity-100" : "-translate-x-1 opacity-0 group-hover:translate-x-0 group-hover:opacity-100",
+                      )}
                     >
                       →
                     </span>

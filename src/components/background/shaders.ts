@@ -28,6 +28,14 @@ uniform vec3 uColor1;
 uniform vec3 uColor2;
 uniform vec3 uColor3;
 uniform vec3 uColor4;
+// Colour change: the previous palette, and how far the new one has washed across (0 → 1).
+uniform vec3 uFrom1;
+uniform vec3 uFrom2;
+uniform vec3 uFrom3;
+uniform vec3 uFrom4;
+uniform float uColorMix;
+// Direction the new colour washes in from, on screen (e.g. (1,0) = left → right).
+uniform vec2 uWashDir;
 uniform float uStop1;
 uniform float uStop2;
 uniform float uStop3;
@@ -56,6 +64,13 @@ float waterCaustics(vec2 uv, float t) {
   return clamp(pow(abs(c), 8.0) * 0.15, 0.0, 0.4);
 }
 
+vec3 paletteColor(float noiseVal, vec3 c1, vec3 c2, vec3 c3, vec3 c4) {
+  if (noiseVal < uStop1) return mix(c1, c2, smoothstep(0.0, uStop1, noiseVal));
+  if (noiseVal < uStop2) return mix(c2, c3, smoothstep(uStop1, uStop2, noiseVal));
+  if (noiseVal < uStop3) return mix(c3, c4, smoothstep(uStop2, uStop3, noiseVal));
+  return c4;
+}
+
 vec3 sineNoise(vec2 uv, float t) {
   vec2 dir = normalize(uDirection);
   float dp = dot(uv, dir);
@@ -73,15 +88,19 @@ vec3 sineNoise(vec2 uv, float t) {
 
   float noiseVal = clamp(n * 0.4 + 0.5, 0.0, 1.0);
 
-  vec3 finalColor;
-  if (noiseVal < uStop1) {
-    finalColor = mix(uColor1, uColor2, smoothstep(0.0, uStop1, noiseVal));
-  } else if (noiseVal < uStop2) {
-    finalColor = mix(uColor2, uColor3, smoothstep(uStop1, uStop2, noiseVal));
-  } else if (noiseVal < uStop3) {
-    finalColor = mix(uColor3, uColor4, smoothstep(uStop2, uStop3, noiseVal));
-  } else {
-    finalColor = uColor4;
+  vec3 finalColor = paletteColor(noiseVal, uColor1, uColor2, uColor3, uColor4);
+  if (uColorMix < 1.0) {
+    // The new colours wash across the screen as a soft wave from one side, its edge
+    // rippled by the liquid's own noise — the motion of the background is unchanged.
+    vec3 fromColor = paletteColor(noiseVal, uFrom1, uFrom2, uFrom3, uFrom4);
+    float along = dot(vUv - 0.5, uWashDir) + (noiseVal - 0.5) * 0.3;
+    float edge = mix(-0.9, 1.15, uColorMix);
+    float wash = 1.0 - smoothstep(edge - 0.3, edge, along);
+    finalColor = mix(fromColor, finalColor, wash);
+    // A soft bright line rides the front of the wave in the new glow colour, so the
+    // change of case study reads clearly.
+    float front = exp(-pow((along - (edge - 0.15)) / 0.07, 2.0));
+    finalColor += uColor1 * front * 0.35 * sin(3.14159 * uColorMix);
   }
   return finalColor;
 }

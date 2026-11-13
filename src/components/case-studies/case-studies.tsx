@@ -1,25 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLenis } from "lenis/react";
-import { caseStudyAnchor, type CaseStudy } from "@/config/case-studies";
+import { caseStudyAnchor, paragraphText, type CaseStudy } from "@/config/case-studies";
 import { gsap, ScrollTrigger, useGSAP } from "@/lib/gsap";
 import { cn } from "@/lib/utils";
 import { isCovered } from "@/lib/reveal-gate";
+import { backgroundState } from "@/lib/background-state";
 import { Section } from "@/components/ui/section";
 import { createJourneyScene, type JourneyScene } from "./journey-scene";
-import {
-  anchorScreens,
-  clamp,
-  JOURNEY,
-  caseCenterTravel,
-  readingTravel,
-  scrubFactor,
-  storyTravel,
-  sectionScreens,
-  travelEnd,
-  travelScreens,
-} from "./journey";
+import { clamp, createPacing, JOURNEY, Q_START, scrubFactor } from "./journey";
 
 export function CaseStudies({ studies }: { studies: CaseStudy[] }) {
   const root = useRef<HTMLElement>(null);
@@ -28,11 +18,28 @@ export function CaseStudies({ studies }: { studies: CaseStudy[] }) {
   const sceneRef = useRef<JourneyScene | null>(null);
   const activeRef = useRef(0);
   const [active, setActive] = useState(0);
-  const [muted, setMuted] = useState(true);
+  // Videos play with sound by default while active (falls back to muted if the browser blocks it).
+  const [muted, setMuted] = useState(false);
+  const mutedRef = useRef(muted);
+  useEffect(() => {
+    mutedRef.current = muted;
+  }, [muted]);
   const lenis = useLenis();
   const lenisRef = useRef(lenis);
+
+  // Every scene of every case, in order, tagged with the case it belongs to.
+  const scenes = useMemo(
+    () => studies.flatMap((study, caseIndex) => study.scenes.map((scene) => ({ ...scene, caseIndex }))),
+    [studies],
+  );
+  const firstScene = useMemo(
+    () => studies.map((_, i) => studies.slice(0, i).reduce((sum, study) => sum + study.scenes.length, 0)),
+    [studies],
+  );
   const total = studies.length;
-  const screens = sectionScreens(total);
+  const pacing = useMemo(() => createPacing(scenes.map((scene) => scene.pace ?? 1)), [scenes]);
+  const { anchorScreens } = pacing;
+  const screens = pacing.sectionScreens;
 
   useEffect(() => {
     lenisRef.current = lenis;
@@ -48,22 +55,19 @@ export function CaseStudies({ studies }: { studies: CaseStudy[] }) {
       let disposed = false;
       const finePointer = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
       const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      const end = travelEnd(total);
-      const moveScreens = travelScreens(total);
+      const moveScreens = pacing.travelScreens;
       const hud = gsap.utils.toArray<HTMLElement>(".journey-hud", section);
-      const keepScrolling = section.querySelector<HTMLElement>(".journey-keep");
       const sound = section.querySelector<HTMLElement>(".journey-sound");
-      const skipSmall = section.querySelector<HTMLElement>(".journey-skip");
       const motion = {
-        travel: 0,
+        q: Q_START,
         camX: 0,
         camY: 0,
         time: 0,
         hud: -1,
-        keep: -1,
-        flying: false,
+        sound: -1,
         wheel: 1,
         pointer: { x: 0, y: 0, inside: false },
+        menuCase: -1,
       };
 
       const setWheelSpeed = (value: number) => {
@@ -89,7 +93,10 @@ export function CaseStudies({ studies }: { studies: CaseStudy[] }) {
       const observer = new ResizeObserver(resize);
       observer.observe(stage);
 
-      createJourneyScene(canvasEl, studies).then((scene) => {
+      createJourneyScene(canvasEl, scenes, {
+        muted: mutedRef.current,
+        onSoundBlocked: () => setMuted(true),
+      }).then((scene) => {
         if (disposed) {
           scene?.dispose();
           return;
@@ -114,30 +121,52 @@ export function CaseStudies({ studies }: { studies: CaseStudy[] }) {
         document.documentElement.addEventListener("pointerleave", onPointerLeave);
       }
 
-      const targetTravel = () => {
+      /** Scroll position → scene clock q. */
+      const targetQ = () => {
         const range = main.end - main.start;
         const scrollTop = lenisRef.current?.targetScroll ?? window.scrollY;
         const progress = range > 0 ? clamp((scrollTop - main.start) / range, 0, 1) : main.progress;
         const scrolled = progress * (moveScreens + JOURNEY.endHold);
-        return clamp(scrolled / moveScreens, 0, 1) * end;
+        // Scroll → scene clock, slowed down while a slide rests in the middle.
+        return pacing.qAtUnits(clamp(scrolled, 0, moveScreens) / JOURNEY.sceneScreens);
       };
-      motion.travel = targetTravel();
+      motion.q = targetQ();
+
+      // Menu jump: cut straight to the new spot with a quick fade instead of flying there.
+      let jumping = false;
+      const onJump = () => {
+        jumping = true;
+        gsap.fromTo(canvasEl, { opacity: 0 }, { opacity: 1, duration: 0.6, ease: "power2.out", overwrite: true });
+      };
+      window.addEventListener("journeyjump", onJump);
 
       const tick = (_time: number, deltaMs: number) => {
+        if (jumping) {
+          jumping = false;
+          motion.q = targetQ();
+        }
         if (!visible.isActive || isCovered()) {
           // Stay synced to the real scroll position while off screen or behind the
-          // preloader, so the scene never starts from a stale position (e.g. scroll
-          // restored on reload) and visibly rewinds.
-          motion.travel = targetTravel();
-          if (!visible.isActive) return;
+          // preloader, so the scene never starts from a stale position and visibly rewinds.
+          motion.q = targetQ();
+          if (!visible.isActive) {
+            // Left the section (fast scroll / menu jump can skip the frames that would reset this):
+            // hand the background colours and the menu back to the default.
+            if (motion.menuCase !== -1) {
+              motion.menuCase = -1;
+              backgroundState.colors = null;
+              window.dispatchEvent(new CustomEvent("journeycase", { detail: -1 }));
+            }
+            return;
+          }
         }
         const delta = Math.min(deltaMs / 1000, 0.05);
         motion.time += delta;
 
-        const target = targetTravel();
+        const target = targetQ();
         const scrub = reduce ? 1 : finePointer ? JOURNEY.scrubDesktop : JOURNEY.scrubMobile;
-        motion.travel += (target - motion.travel) * scrubFactor(scrub, delta);
-        if (Math.abs(target - motion.travel) < 0.001) motion.travel = target;
+        motion.q += (target - motion.q) * scrubFactor(scrub, delta);
+        if (Math.abs(target - motion.q) < 0.0005) motion.q = target;
 
         if (finePointer && !reduce) {
           const follow = scrubFactor(0.1, delta);
@@ -145,69 +174,49 @@ export function CaseStudies({ studies }: { studies: CaseStudy[] }) {
           motion.camY += (motion.pointer.y * JOURNEY.parallax - motion.camY) * follow;
         }
 
-        const scene = sceneRef.current;
-        scene?.render({
+        const status = sceneRef.current?.render({
           camX: motion.camX,
           camY: motion.camY,
-          camZ: -motion.travel,
+          q: motion.q,
           time: reduce ? 0 : motion.time,
-          entry: reduce ? 1 : motion.travel / readingTravel(0),
-          speed: Math.abs(target - motion.travel),
-          pointer: motion.pointer,
         });
 
-        let nearest = 0;
-        let best = Infinity;
-        studies.forEach((_, i) => {
-          const gap = Math.abs(caseCenterTravel(i) - motion.travel);
-          if (gap < best) {
-            best = gap;
-            nearest = i;
-          }
-        });
-        if (nearest !== activeRef.current) {
-          activeRef.current = nearest;
-          setActive(nearest);
+        const nearest = clamp(Math.round(motion.q), 0, scenes.length - 1);
+        const caseIndex = scenes[nearest]?.caseIndex ?? 0;
+        if (caseIndex !== activeRef.current) {
+          activeRef.current = caseIndex;
+          setActive(caseIndex);
         }
-        scene?.setVideo(
-          nearest,
-          motion.travel > readingTravel(nearest) - 34 && motion.travel < storyTravel(nearest) + 20,
-        );
 
         const docked = main.isActive ? 1 : 0;
+        // Tell the menu which case is on screen (-1 = none, e.g. still on the hero).
+        const inCase = docked && motion.q > JOURNEY.enter[1] ? caseIndex : -1;
+        if (inCase !== motion.menuCase) {
+          motion.menuCase = inCase;
+          // Ease the liquid background to this case study's colours (default outside cases).
+          backgroundState.colors = inCase >= 0 ? (studies[inCase]?.background ?? null) : null;
+          window.dispatchEvent(new CustomEvent("journeycase", { detail: inCase }));
+        }
         const wheel = docked ? JOURNEY.wheelSpeed : 1;
         if (wheel !== motion.wheel) {
           motion.wheel = wheel;
           setWheelSpeed(wheel);
         }
-        const moving = clamp((motion.travel - 4) / 10, 0, 1);
-        const keep = docked * (1 - moving);
-        if (Math.abs(keep - motion.keep) > 0.003 || (docked === 0 && motion.keep !== 0)) {
-          motion.keep = keep;
-          if (keepScrolling) {
-            keepScrolling.style.opacity = keep.toFixed(3);
-            keepScrolling.style.pointerEvents = keep > 0.5 ? "auto" : "none";
-          }
-          const after = (docked * moving).toFixed(3);
-          [sound, skipSmall].forEach((el) => {
-            if (!el) return;
-            el.style.opacity = after;
-            el.style.pointerEvents = docked * moving > 0.5 ? "auto" : "none";
-          });
-        }
 
-        const flying = docked === 1 && motion.travel > 10 && motion.travel < end - 2;
-        if (flying !== motion.flying) {
-          motion.flying = flying;
-          document.documentElement.dataset.journey = flying ? "flying" : "";
-        }
-
-        const hudValue = clamp((motion.travel - 6) / 18, 0, 1);
+        const hudValue = clamp((motion.q - Q_START) / 0.35, 0, 1);
         if (Math.abs(hudValue - motion.hud) > 0.003) {
           motion.hud = hudValue;
           hud.forEach((el) => {
             el.style.opacity = hudValue.toFixed(3);
           });
+        }
+
+        // Only while a video plays in the centre; hidden as soon as its slide starts leaving.
+        const soundValue = docked && status?.sound ? 1 : 0;
+        if (sound && Math.abs(soundValue - motion.sound) > 0.003) {
+          motion.sound = soundValue;
+          sound.style.opacity = soundValue.toFixed(3);
+          sound.style.pointerEvents = soundValue > 0.5 ? "auto" : "none";
         }
       };
 
@@ -215,17 +224,19 @@ export function CaseStudies({ studies }: { studies: CaseStudy[] }) {
 
       return () => {
         disposed = true;
+        backgroundState.colors = null;
         gsap.ticker.remove(tick);
+        window.removeEventListener("journeyjump", onJump);
         observer.disconnect();
         window.removeEventListener("pointermove", onPointerMove);
         document.documentElement.removeEventListener("pointerleave", onPointerLeave);
         sceneRef.current?.dispose();
         sceneRef.current = null;
-        delete document.documentElement.dataset.journey;
         setWheelSpeed(1);
       };
     },
-    { scope: root },
+    // Rebuild the 3D scene whenever the slide content changes (e.g. a video is added).
+    { scope: root, dependencies: [scenes, pacing], revertOnUpdate: true },
   );
 
   const toggleSound = () => {
@@ -234,10 +245,14 @@ export function CaseStudies({ studies }: { studies: CaseStudy[] }) {
     setMuted(nextMuted);
   };
 
-  const skip = () => {
+  const scrollForward = () => {
     const section = root.current;
     if (!section) return;
-    lenisRef.current?.scrollTo(section.offsetTop + section.offsetHeight - window.innerHeight, { duration: 2.4 });
+    const scrollTop = lenisRef.current?.targetScroll ?? window.scrollY;
+    const offset = (scrollTop - section.offsetTop) / window.innerHeight;
+    const next = scenes.findIndex((_, i) => anchorScreens(i) > offset + 0.05);
+    const top = next >= 0 ? section.offsetTop + anchorScreens(next) * window.innerHeight : section.offsetTop + section.offsetHeight;
+    lenisRef.current?.scrollTo(top, { duration: 2.4 });
   };
 
   const activeStudy = studies[active];
@@ -256,17 +271,24 @@ export function CaseStudies({ studies }: { studies: CaseStudy[] }) {
           id={caseStudyAnchor(study.slug)}
           aria-hidden="true"
           className="pointer-events-none absolute left-0 h-px w-px"
-          style={{ top: `${anchorScreens(i) * 100}svh` }}
+          style={{ top: `${anchorScreens(firstScene[i]) * 100}svh` }}
         />
       ))}
 
       <div className="sr-only">
         {studies.map((study) => (
           <article key={study.slug}>
-            <h2>{study.title || study.category}</h2>
-            {study.paragraphs.map((paragraph) => (
-              <p key={paragraph}>{paragraph}</p>
-            ))}
+            <h2>{study.client}</h2>
+            {study.scenes.flatMap((scene, s) =>
+              scene.blocks.flatMap((block, b) => {
+                if (block.kind === "image") return [<p key={`${s}-${b}`}>{block.alt}</p>];
+                if (block.kind !== "text") return [];
+                return [
+                  block.title ? <h3 key={`${s}-${b}-t`}>{block.title}</h3> : null,
+                  ...(block.paragraphs ?? []).map((paragraph, p) => <p key={`${s}-${b}-${p}`}>{paragraphText(paragraph)}</p>),
+                ];
+              }),
+            )}
           </article>
         ))}
       </div>
@@ -274,35 +296,35 @@ export function CaseStudies({ studies }: { studies: CaseStudy[] }) {
       <div ref={viewport} className="sticky top-0 h-svh overflow-hidden text-white">
         <canvas ref={canvas} aria-hidden="true" className="absolute inset-0 block size-full opacity-0" />
 
-        <div className="journey-hud absolute bottom-[clamp(1.25rem,4svh,3rem)] left-[clamp(1.375rem,0.7rem+2.4vw,3rem)] flex items-center gap-4 opacity-0">
-          <p className="text-[clamp(1.5rem,1rem+1.6vw,2.75rem)] font-bold leading-none tabular-nums">
+        {/* Figma: counter 38px (1 bold, /5 light, 1.4px tracking), 24px gap, client 22px light 9.4px tracking. */}
+        <div className="journey-hud absolute bottom-[clamp(1.25rem,5.75svh,4.5rem)] left-[clamp(1.25rem,2.08vw,3rem)] flex items-center gap-[clamp(0.75rem,1.25vw,2rem)] opacity-0">
+          <p className="text-[clamp(1.5rem,1.98vw,3rem)] font-bold leading-none tracking-[0.037em] tabular-nums [text-box:trim-both_cap_alphabetic]">
             {active + 1}
-            <span className="font-light opacity-60">/{total}</span>
+            <span className="font-light">/{total}</span>
           </p>
-          <p className="whitespace-nowrap text-fluid-xs uppercase leading-relaxed tracking-[0.3em] opacity-80">
-            [Scroll to travel]
+          <p className="whitespace-nowrap text-[clamp(0.75rem,1.146vw,1.75rem)] font-light uppercase leading-none tracking-[0.427em] [text-box:trim-both_cap_alphabetic] max-md:tracking-[0.25em]">
+            {activeStudy?.client}
           </p>
         </div>
 
-        <div className="absolute inset-x-0 bottom-[clamp(1.25rem,4svh,3rem)] flex justify-center max-md:bottom-[clamp(4rem,9svh,5rem)]">
-          <div className="journey-keep pointer-events-none absolute bottom-0 flex flex-col items-center gap-[clamp(1.25rem,3svh,2.5rem)] opacity-0">
-            <p className="text-fluid-xs uppercase tracking-[0.4em]">[Keep scrolling]</p>
-            <button
-              type="button"
-              onClick={skip}
-              className="rounded-full border border-white/70 px-5 py-2 text-fluid-sm transition-colors hover:bg-white/15"
-            >
-              Skip Experience
-            </button>
-          </div>
+        {/* Figma: 22px light, 9.4px tracking (brackets 1.4px), right-aligned on the counter's centre line. */}
+        <button
+          type="button"
+          onClick={scrollForward}
+          className="journey-hud absolute bottom-[calc(clamp(1.25rem,5.75svh,4.5rem)+(clamp(1.5rem,1.98vw,3rem)-clamp(0.75rem,1.146vw,1.75rem))*0.35)] right-[clamp(1.25rem,2.08vw,3rem)] whitespace-nowrap text-[clamp(0.75rem,1.146vw,1.75rem)] font-light uppercase leading-none tracking-[0.427em] opacity-0 transition-transform duration-300 [text-box:trim-both_cap_alphabetic] hover:-translate-y-1 max-md:tracking-[0.25em]"
+        >
+          {/* "[ S" and "D ]" get the same gap as the letters; no trailing space after "]". */}
+          [Scroll<span className="max-md:hidden"> to move forward</span>
+          <span className="tracking-normal">]</span>
+        </button>
+
+        <div className="pointer-events-none absolute inset-x-0 bottom-[clamp(1.25rem,4svh,3rem)] flex justify-center max-md:bottom-[clamp(3.75rem,9svh,5rem)]">
           <button
             type="button"
             onClick={toggleSound}
             aria-pressed={!muted}
-            disabled={!activeStudy?.video}
             className={cn(
-              "journey-sound pointer-events-none inline-flex items-center gap-3 rounded-full border border-white/60 px-5 py-2.5 text-fluid-xs uppercase tracking-[0.3em] opacity-0 transition-colors hover:bg-white/15",
-              !activeStudy?.video && "invisible",
+              "journey-sound pointer-events-none inline-flex items-center gap-3 rounded-full border border-white/60 px-5 py-2.5 text-fluid-xs uppercase tracking-[0.3em] opacity-0 transition-[opacity,background-color] duration-300 hover:bg-white/15",
             )}
           >
             <span aria-hidden="true" className="flex h-3.5 items-end gap-0.5">
@@ -317,14 +339,6 @@ export function CaseStudies({ studies }: { studies: CaseStudy[] }) {
             {muted ? "Sound on!" : "Sound off"}
           </button>
         </div>
-
-        <button
-          type="button"
-          onClick={skip}
-          className="journey-skip pointer-events-none absolute bottom-[clamp(1.25rem,4svh,3rem)] right-[clamp(1.375rem,0.7rem+2.4vw,3rem)] text-fluid-xs underline-offset-4 opacity-0 hover:underline"
-        >
-          Skip Experience
-        </button>
       </div>
     </Section>
   );

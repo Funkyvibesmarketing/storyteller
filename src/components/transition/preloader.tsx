@@ -5,17 +5,20 @@ import { useLenis } from "lenis/react";
 import { gsap, useGSAP } from "@/lib/gsap";
 import { setCovered } from "@/lib/reveal-gate";
 import { primeCaseVideo } from "@/lib/case-video";
-import { caseStudies } from "@/config/case-studies";
+import { firstScreenVideo } from "@/config/case-studies";
+
+/**
+ * Loading screen — a 1:1 port of the FunkyVibes loader (HTML_BCKP/assets/js/preloader.js
+ * + #loader styles in style.css): 12 frosted columns, solid "LOADING" word, dashed
+ * progress line with a dot, % counter; then the word fades and the columns lift away
+ * one by one from the right.
+ */
 
 const COLUMNS = 12;
-
-const wordClass =
-  "whitespace-nowrap text-center text-[clamp(2rem,0.82rem+5.566vw,9rem)] font-normal leading-normal tracking-[clamp(0.4em,5.73vw,0.95em)] indent-[3%] [text-box:trim-both_cap_alphabetic]";
-
 const VIDEO_WAIT = 8000;
 
 function whenVideoReady() {
-  const first = caseStudies.find((study) => study.video)?.video;
+  const first = firstScreenVideo();
   if (!first || !document.getElementById("case-studies")) return Promise.resolve();
   return primeCaseVideo(first, VIDEO_WAIT);
 }
@@ -32,12 +35,7 @@ function whenPageReady() {
 export function Preloader() {
   const root = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
-  const word = useRef<HTMLDivElement>(null);
-  const wordFill = useRef<HTMLParagraphElement>(null);
-  const row = useRef<HTMLDivElement>(null);
-  const track = useRef<HTMLDivElement>(null);
-  const fill = useRef<HTMLSpanElement>(null);
-  const dot = useRef<HTMLSpanElement>(null);
+  const bar = useRef<HTMLSpanElement>(null);
   const count = useRef<HTMLSpanElement>(null);
   const lenis = useLenis();
   const lenisRef = useRef(lenis);
@@ -50,12 +48,14 @@ export function Preloader() {
 
   useGSAP(
     () => {
+      const loader = root.current;
+      if (!loader) return;
       setCovered(true);
       let cancelled = false;
 
       const finish = () => {
         done.current = true;
-        gsap.set(root.current, { display: "none" });
+        gsap.set(loader, { display: "none" });
         lenisRef.current?.start();
         window.dispatchEvent(new CustomEvent("preloaderComplete"));
       };
@@ -66,66 +66,64 @@ export function Preloader() {
         return;
       }
 
-      const setFill = gsap.quickSetter(fill.current, "scaleX");
-      const setDot = gsap.quickSetter(dot.current, "x", "px");
-      let trackWidth = track.current?.offsetWidth ?? 0;
-      const measure = () => {
-        trackWidth = track.current?.offsetWidth ?? 0;
+      // Columns sit on whole device pixels so no hairline gaps show between them.
+      const columns = gsap.utils.toArray<HTMLElement>(".loader-column", loader);
+      const layoutColumns = () => {
+        const dpr = window.devicePixelRatio || 1;
+        const total = loader.clientWidth;
+        const edge = (i: number) => Math.round((i * total * dpr) / COLUMNS) / dpr;
+        columns.forEach((col, i) => {
+          const left = edge(i);
+          const right = i === COLUMNS - 1 ? total : edge(i + 1) + Math.ceil(dpr) / dpr;
+          col.style.left = `${left}px`;
+          col.style.width = `${right - left}px`;
+        });
       };
-      window.addEventListener("resize", measure, { passive: true });
+      layoutColumns();
+      window.addEventListener("resize", layoutColumns);
 
-      const progress = { value: 0 };
-      let lastShown = -1;
-      const render = () => {
-        const value = progress.value;
-        setFill(value);
-        setDot(value * trackWidth);
-        if (wordFill.current) wordFill.current.style.clipPath = `inset(-25% ${(1 - value) * 100}% -25% 0)`;
-        const shown = Math.round(value * 100);
-        if (shown !== lastShown && count.current) {
-          lastShown = shown;
-          count.current.textContent = `${shown}%`;
-        }
-      };
-
-      gsap.set(dot.current, { xPercent: -100, yPercent: -50 });
-      render();
-
-      const columns = gsap.utils.toArray<HTMLElement>(".loader-column");
+      const counter = { value: 0 };
       let ready = false;
+      gsap.set(bar.current, { width: "0%" });
+
       const tl = gsap.timeline({ onComplete: finish });
 
-      tl.fromTo(content.current, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.5, ease: "power2.out" }, 0)
-        .fromTo(word.current, { y: 30 }, { y: 0, duration: 1, ease: "expo.out" }, 0)
-        .fromTo(row.current, { y: 20, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.9, ease: "expo.out" }, 0.15)
-        .to(progress, { value: 1, duration: 2.2, ease: "power2.inOut", onUpdate: render }, 0.2)
+      tl.fromTo(content.current, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.4 }, 0)
+        // STEP 1 → progress fill + counter
+        .to(bar.current, { width: "100%", duration: 2, ease: "power2.out" }, 0)
+        .to(
+          counter,
+          {
+            value: 100,
+            duration: 2,
+            ease: "none",
+            onUpdate: () => {
+              if (count.current) count.current.textContent = `${Math.round(counter.value)}%`;
+            },
+          },
+          0,
+        )
+        // Hold at 100% until the page (fonts, first video) is actually ready.
         .add(() => {
           if (!ready) tl.pause();
         })
-        .addLabel("exit", "+=0.2")
-        .to(word.current, { scale: 1.06, opacity: 0, duration: 0.7, ease: "power3.in" }, "exit")
-        .to(row.current, { y: -16, opacity: 0, duration: 0.5, ease: "power2.in" }, "exit")
-        .addLabel("lift", "-=0.15")
-        .to(
-          columns,
-          {
-            yPercent: (i: number) => (i % 2 === 0 ? -100 : 100),
-            duration: 1.4,
-            ease: "power4.inOut",
-            stagger: { each: 0.05, from: "center" },
-          },
-          "lift",
-        )
-        .call(
-          () => {
-            window.scrollTo(0, 0);
-            lenisRef.current?.scrollTo(0, { immediate: true, force: true });
-          },
-          undefined,
-          "exit",
-        )
+        .call(() => {
+          window.scrollTo(0, 0);
+          lenisRef.current?.scrollTo(0, { immediate: true, force: true });
+        })
+        // STEP 2 → text fade out
+        .to(content.current, { opacity: 0, duration: 0.6, ease: "power2.out" })
+        // STEP 3 → columns disappear, last column first
+        .addLabel("lift")
+        .to(columns, {
+          yPercent: -100,
+          duration: 1.6,
+          ease: "power4.inOut",
+          stagger: { each: 0.12, from: "end" },
+        })
         .call(() => setCovered(false), undefined, "lift+=0.55")
-        .to(root.current, { opacity: 0, duration: 0.3 }, "-=0.35");
+        // hide loader
+        .to(loader, { opacity: 0, duration: 0.3, delay: -0.4 });
 
       whenPageReady().then(() => {
         if (cancelled) return;
@@ -135,7 +133,7 @@ export function Preloader() {
 
       return () => {
         cancelled = true;
-        window.removeEventListener("resize", measure);
+        window.removeEventListener("resize", layoutColumns);
       };
     },
     { scope: root },
@@ -146,47 +144,30 @@ export function Preloader() {
       {Array.from({ length: COLUMNS }, (_, i) => (
         <div
           key={i}
-          className="loader-column h-full flex-1 bg-white/2 backdrop-blur-[40px] will-change-transform max-md:backdrop-blur-2xl"
-          style={{ marginRight: i < COLUMNS - 1 ? -1 : 0 }}
+          className="loader-column absolute inset-y-0 bg-white/2 backdrop-blur-[40px] will-change-transform"
+          style={{ left: `${(i * 100) / COLUMNS}%`, width: `${100 / COLUMNS}%` }}
         />
       ))}
 
       <div
         ref={content}
-        className="invisible absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-[clamp(2.5rem,1.5rem+2.5vw,4.5rem)] font-sans text-white opacity-0"
+        className="invisible absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center gap-15 font-sans text-white opacity-0 md:max-[992px]:gap-16 max-md:left-0 max-md:translate-x-5.5"
       >
-        <div ref={word} className="relative will-change-transform">
-          <p className={`${wordClass} text-transparent [-webkit-text-stroke:1px_rgba(255,255,255,0.7)]`}>
-            LOAD<strong className="font-bold">ING</strong>
-          </p>
-          <p
-            ref={wordFill}
-            className={`${wordClass} absolute inset-0 text-white`}
-            style={{ clipPath: "inset(-25% 100% -25% 0)" }}
-          >
-            LOAD<strong className="font-bold">ING</strong>
-          </p>
-        </div>
+        <h3 className="mb-0 whitespace-nowrap text-center text-[6.25vw] font-normal leading-normal tracking-[5.73vw] indent-[3%] [text-box:trim-both_cap_alphabetic] md:max-[992px]:text-[64px] md:max-[992px]:tracking-[46px] max-md:tracking-[8vw]">
+          LOAD<strong className="font-bold">ING</strong>
+        </h3>
 
-        <div
-          ref={row}
-          className="flex items-center justify-center gap-[clamp(0.75rem,0.5rem+0.8vw,1.5rem)] text-[clamp(0.875rem,0.48rem+1.683vw,3rem)] leading-normal"
-        >
-          <span className="[text-box:trim-both_cap_alphabetic]">Progress</span>
-          <div ref={track} className="relative">
-            <span className="mt-0.5 block h-px w-[clamp(8rem,49.11vw-2rem,60rem)] border-b border-dashed border-white/70" />
-            <span
-              ref={fill}
-              className="absolute left-0 top-0.5 block h-px w-full origin-left scale-x-0 border-b border-white will-change-transform"
-            />
-            <span
-              ref={dot}
-              className="absolute left-0 top-[2.5px] block size-[clamp(0.875rem,0.7rem+0.45vw,1.5rem)] rounded-full bg-white will-change-transform"
-            />
+        <div className="flex flex-row items-center justify-center gap-5 text-[2.08vw] font-normal leading-normal md:max-[992px]:text-[24px] max-md:text-[14px]">
+          <span className="inline-block [text-box:trim-both_cap_alphabetic]">Progress</span>
+          <div className="relative grid items-center">
+            <span className="mt-0.5 block h-px w-[49.11vw] border-b border-dashed border-white" />
+            <span ref={bar} className="absolute top-0.5 block h-px w-0 border-b border-white">
+              <span className="absolute -top-2.25 right-0 block size-5 rounded-full bg-white max-md:-top-1.75 max-md:size-3.5" />
+            </span>
           </div>
           <span
             ref={count}
-            className="inline-block w-[2.6em] tabular-nums [text-box:trim-both_cap_alphabetic]"
+            className="inline-block w-25 tabular-nums [text-box:trim-both_cap_alphabetic] md:max-[992px]:w-15.25 max-md:w-9.25"
           >
             0%
           </span>

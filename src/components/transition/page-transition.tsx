@@ -45,7 +45,9 @@ export function PageTransition({ children }: { children: ReactNode }) {
       }
 
       if (url.pathname === window.location.pathname) {
-        instance?.scrollTo(url.hash || 0, { force: true });
+        // Same page: jump straight there (no scrolling through every slide in between).
+        window.dispatchEvent(new CustomEvent("journeyjump"));
+        instance?.scrollTo(url.hash || 0, { immediate: true, force: true });
         return;
       }
 

@@ -7,7 +7,7 @@ import { gsap, MOBILE, MOTION_OK, useGSAP } from "@/lib/gsap";
 import { whenRevealed } from "@/lib/reveal-gate";
 import { backgroundState } from "@/lib/background-state";
 import { Section } from "@/components/ui/section";
-import { caseStudies, caseStudyAnchor } from "@/config/case-studies";
+import { ScrollHintLabel } from "@/components/ui/scroll-hint-label";
 
 const subhead = "We tell";
 const headline = ["Your", "Story"];
@@ -72,19 +72,16 @@ export function Hero() {
   const scrollForward = () => {
     const section = root.current;
     if (!section) return;
-    const first = caseStudies[0] ? document.getElementById(caseStudyAnchor(caseStudies[0].slug)) : null;
-    if (first) lenis?.scrollTo(first, { duration: 3.2 });
-    else lenis?.scrollTo(section.offsetTop + section.offsetHeight, { duration: 3.2 });
+    // Next comes the "Not for onward distribution" note, resting in the centre.
+    lenis?.scrollTo(section.offsetTop + section.offsetHeight + window.innerHeight * 0.6, { duration: 3.2 });
   };
 
   return (
     <Section ref={root} aria-labelledby="hero-title" className="h-[250svh]">
       <div className="sticky top-0 h-svh overflow-hidden">
-        <div className="hero-content relative grid h-full content-center gap-y-[clamp(3rem,1.5rem+5vw,7rem)] px-[clamp(1.375rem,14.1vw-1.93rem,16rem)] py-[clamp(1.5rem,3.5vw,5rem)] text-white will-change-transform">
-          <h1
-            id="hero-title"
-            className="grid gap-y-[clamp(3rem,1.5rem+5vw,7rem)]"
-          >
+        <div className="hero-content relative grid h-full content-center justify-items-center gap-y-[clamp(3rem,1.5rem+5vw,7rem)] px-[clamp(1.375rem,14.1vw-1.93rem,16rem)] py-[clamp(1.5rem,3.5vw,5rem)] text-white will-change-transform">
+          {/* Figma: "WE TELL" sits on top of "YOUR STORY", left-aligned with it, 56px apart; the pair is centred. */}
+          <h1 id="hero-title" className="grid w-fit justify-items-start gap-y-[clamp(1.25rem,2.92vw,3.5rem)]">
             <span className="sr-only">
               {subhead} {headline.join(" ")}
             </span>
@@ -96,7 +93,7 @@ export function Hero() {
             </span>
             <span
               aria-hidden="true"
-              className="flex justify-between gap-[0.45em] text-center text-[clamp(2rem,0.25rem+9.375vw,14rem)] font-normal uppercase leading-[0.9] tracking-[0.08em] [text-box:trim-both_cap_alphabetic] max-md:justify-center"
+              className="flex gap-[0.4em] whitespace-nowrap text-[clamp(2rem,0.25rem+9.375vw,14rem)] font-normal uppercase leading-[0.9] tracking-[0.08em] [text-box:trim-both_cap_alphabetic]"
             >
               {headline.map((word) => (
                 <span key={word} className="inline-block shrink-0 overflow-hidden whitespace-nowrap">
@@ -117,7 +114,7 @@ export function Hero() {
                 onClick={scrollForward}
                 className="relative text-[clamp(0.75rem,0.68rem+0.3vw,1.125rem)] font-light uppercase leading-none tracking-[0.3em] transition-transform duration-300 [text-box:trim-both_cap_alphabetic] hover:-translate-y-1.25"
               >
-                [Scroll to move forward]
+                <ScrollHintLabel />
               </button>
               <div className="mt-[clamp(1rem,0.8rem+0.6vw,1.75rem)] flex justify-center" aria-hidden="true">
                 <Image

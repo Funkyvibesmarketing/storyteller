@@ -87,7 +87,8 @@ export function getCaseVideo(src: string) {
 }
 
 export function isCaseVideoReady(video: HTMLVideoElement) {
-  return video.dataset.ready === "1";
+  // Enough data to play on (HAVE_FUTURE_DATA) also counts, not only "canplaythrough".
+  return video.dataset.ready === "1" || video.readyState >= 3;
 }
 
 export function loadCaseVideo(src: string, urgent = false) {

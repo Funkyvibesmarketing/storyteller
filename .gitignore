@@ -44,3 +44,6 @@ next-env.d.ts
 
 # videos are hosted on Cloudinary
 public/video/
+
+# Figma frame exports used as design reference (not part of the site)
+/design-reference/
