@@ -1,26 +1,34 @@
 export const siteConfig = {
-  name: "Storyteller",
+  name: "Storyteller by FunkyVibes",
   shortName: "Storyteller",
-  title: "Storyteller — Creative studio crafting digital stories",
+  title: "Storyteller by FunkyVibes | Film, websites, social & branding that tell your story",
   description:
-    "Storyteller is a creative studio crafting brands, websites and digital experiences that move people. Strategy, design, development and motion.",
-  url: (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000").replace(/\/$/, ""),
+    "Storyteller by FunkyVibes tells the stories of people, places and businesses through film & photography, websites, social media, strategy and branding, making people feel something, and giving them a reason to act on it.",
+  /** Live site. Override per environment with NEXT_PUBLIC_SITE_URL (e.g. preview deploys). */
+  url: (process.env.NEXT_PUBLIC_SITE_URL ?? "https://storyteller.funkyvibes.co.uk").replace(/\/$/, ""),
+  /** Placeholder until the real address is confirmed — kept out of search data (structured data). */
   email: "hello@example.com",
-  locale: "en_US",
-  language: "en",
+  locale: "en_GB",
+  language: "en-GB",
   keywords: [
-    "creative studio",
-    "digital agency",
-    "brand strategy",
-    "web design",
-    "web development",
-    "motion design",
-    "portfolio",
+    "storytelling agency",
+    "brand storytelling",
+    "video production",
+    "film and photography",
+    "website design",
+    "social media marketing",
+    "content strategy",
+    "branding agency",
+    "Rochdale",
+    "FunkyVibes",
   ],
+  /** The company behind the site. */
   author: {
     name: "FunkyVibes",
-    url: "https://example.com",
+    url: "https://funkyvibes.co.uk",
   },
+  /** Services offered (used in structured data). Keep in step with src/config/services.ts. */
+  services: ["Website", "Social Media", "Strategy", "Film & Photography", "Branding"],
   twitterHandle: "@funkyvibes",
   themeColor: "#782b81",
   links: {

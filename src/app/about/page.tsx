@@ -1,4 +1,5 @@
 import { processSteps, stats } from "@/config/content";
+import { siteConfig } from "@/config/site";
 import { createMetadata } from "@/lib/seo";
 import { webPageSchema } from "@/lib/structured-data";
 import { JsonLd } from "@/components/seo/json-ld";
@@ -6,7 +7,7 @@ import { Cta, PageHero, Process, Statement, Stats } from "@/components/sections"
 
 const title = "About";
 const description =
-  "Meet the designers, developers and storytellers behind Storyteller, a creative studio crafting digital experiences that move people.";
+  `Meet the filmmakers, designers and storytellers behind ${siteConfig.name}, telling the stories of people, places and businesses through film, websites, social and branding.`;
 
 export const metadata = createMetadata({ title, description, path: "/about" });
 

@@ -210,6 +210,8 @@ export function Services() {
         >
           we&rsquo;ll tell stories through&hellip;
         </p>
+        {/* Readable section heading for search engines and screen readers (the cards are drawn in WebGL). */}
+        <h2 className="sr-only">Our services: {services.map((s) => s.lines.join(" ").replace(/&(\S)/, "& $1")).join(", ")}</h2>
 
         <ul className={`flex flex-col items-center gap-6 px-4 py-16 group-data-[animated=true]/services:[transform-style:preserve-3d] group-data-[animated=true]/services:absolute group-data-[animated=true]/services:inset-0 group-data-[animated=true]/services:block group-data-[animated=true]/services:p-0`}>
           {services.map((service) => (

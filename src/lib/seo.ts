@@ -22,7 +22,9 @@ export function createMetadata({
   const images = image ? [{ url: image, width: 1200, height: 630, alt: fullTitle }] : undefined;
 
   return {
-    title,
+    // Only set when the page has its own title: an explicit `title: undefined` wipes the layout's
+    // default and the page ends up with no <title> at all (the tab then shows the URL).
+    ...(title ? { title } : { title: { absolute: siteConfig.title } }),
     description,
     alternates: { canonical: url },
     openGraph: {
