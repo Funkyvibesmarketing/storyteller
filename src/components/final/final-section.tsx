@@ -79,9 +79,10 @@ export function FinalSection() {
   return (
     <Section ref={root} aria-label="Why us" className="motion-safe:h-[560svh]">
       <div className="grid min-h-svh place-items-center gap-24 overflow-hidden px-4 py-24 motion-safe:gap-0 text-white motion-safe:sticky motion-safe:top-0 motion-safe:h-svh motion-safe:py-0">
-        <div className="final-why motion-safe:col-start-1 motion-safe:row-start-1 w-full max-w-[clamp(18rem,35vw,52rem)] will-change-transform">
-          <h2 className="text-[clamp(0.875rem,0.55rem+0.75vw,1.75rem)] font-bold leading-none tracking-[0.2em]">Why us</h2>
-          <div className="mt-[2.6em] space-y-[1.3em] text-[clamp(0.8125rem,0.5rem+0.75vw,1.625rem)] font-normal leading-[1.32] tracking-[0.2em]">
+        <div className="final-why motion-safe:col-start-1 motion-safe:row-start-1 w-full max-w-[clamp(18rem,48vw,72rem)] will-change-transform">
+          {/* Figma: 32px / 700, line-height 33px, 4.8px tracking, capitals. Body 24px / 400, 33px, 2.4px tracking. Box 921px. */}
+          <h2 className="text-[clamp(1.125rem,0.6rem+1.17vw,2.5rem)] font-bold uppercase leading-[1.03] tracking-[0.15em]">Why us</h2>
+          <div className="mt-[1.3em] space-y-[1.4em] text-[clamp(0.8125rem,0.5rem+0.833vw,1.75rem)] font-normal leading-[1.375] tracking-[0.1em]">
             {WHY_US.map((paragraph) => (
               <p key={paragraph.slice(0, 24)}>{paragraph}</p>
             ))}

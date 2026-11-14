@@ -91,12 +91,19 @@ type Fader = {
 
 type TextPart = {
   text: Text;
-  role: "title" | "para" | "lead" | "marker";
+  role: "title" | "para" | "lead" | "marker" | "bold";
   /** Paragraph index, -1 for the title. */
   para: number;
   bullet: boolean;
   /** Laid-out position inside the block (parts move away from it while scattering). */
   base: { x: number; y: number };
+  /** The part's full text (the typewriter shows a growing slice of it). */
+  full: string;
+  /**
+   * Role "bold": a faux-bold copy of the whole paragraph, clipped to one line of a bold phrase
+   * (characters start…end; `segment` = which line of that phrase this copy shows).
+   */
+  boldRange?: { start: number; end: number; segment: number };
 };
 
 /** One flying piece of a "scatter" block: the title, or a paragraph with its marker/lead. */
@@ -134,8 +141,14 @@ type Item = {
   layerScale: number;
   /** Fly-through: current text opacity (to skip redundant updates). */
   textOpacity: number;
+  /** Text blocks with `typewriter`: how many characters are showing (-1 = not set yet). */
+  typed: number;
+  /** Text blocks with `pointer`: the doodle arrow after the line. */
+  arrow?: { mesh: Mesh; material: MeshBasicMaterial };
   /** "browser" videos: the window drawn around the video. */
   browser?: { chrome: Mesh; redraw: () => void };
+  /** Videos with `highlight`: the pulsing glow behind the panel. */
+  glow?: { mesh: Mesh; material: MeshBasicMaterial };
   /** Images only: how rolled-up into a tube the picture is (0 flat → 1 full pipe). */
   curl: { value: number } | null;
   screen: MeshBasicMaterial | null;
@@ -143,6 +156,11 @@ type Item = {
   playing: boolean;
   /** Fully arrived and not yet leaving. */
   atRest: boolean;
+  /**
+   * Videos with sound: has reached the centre this visit, so its sound (and the sound button)
+   * stays on until it has left the screen — not just while it rests in the centre.
+   */
+  heard: boolean;
   enter: Direction;
   exit: Direction;
   spin: number;
@@ -520,6 +538,22 @@ export async function createJourneyScene(
 
   /* ---------- Flat video (a plain panel, e.g. a screen recording) ---------- */
 
+  /** Section-heading letter spacing as a share of the font size (Figma: 10.08px at 24px). */
+  const HEADING_TRACKING = 10.08 / 24;
+
+  /**
+   * Doodle arrow after a `pointer` line, in design px: a 120×64 box, the stroke's tail at (4, 22)
+   * (placed `gap` after the last letter, level with the line), curling down into an arrowhead.
+   */
+  const ARROW = {
+    w: 120,
+    h: 64,
+    gap: 14,
+    tail: { x: 4, y: 22 },
+    path: "M4 22 C 22 8, 46 6, 58 18 C 68 28, 58 40, 49 33 C 41 26, 52 14, 70 16 C 88 18, 100 32, 104 54",
+    head: "M96 47 L 104 55 L 109 45",
+  };
+
   /** Browser window chrome around a "browser" video, as a share of the video width. */
   const BROWSER = { bar: 0.045, border: 0.005, radius: 0.012 };
 
@@ -568,13 +602,46 @@ export async function createJourneyScene(
     ctx.fillText(url, w / 2, cy + 1);
   };
 
-  const createFlatVideo = (item: Item, poster: string, src?: string, browserUrl?: string) => {
+  const createFlatVideo = (item: Item, poster: string, src?: string, browserUrl?: string, highlight = false) => {
     const material = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, toneMapped: false, opacity: 0 });
     material.userData.alwaysTransparent = true;
     disposables.push(material);
     const screenMesh = new THREE.Mesh(planeGeometry, material);
     item.group.add(screenMesh);
     const materials: Material[] = [material];
+
+    if (highlight) {
+      // Soft brand-pink halo behind the panel (additive, so it glows on the dark background).
+      // Its opacity is driven per frame (fade with the video × a slow pulse), not by the fader.
+      const canvas = document.createElement("canvas");
+      canvas.width = 256;
+      canvas.height = 256;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        const g = ctx.createRadialGradient(128, 128, 20, 128, 128, 128);
+        g.addColorStop(0, "rgba(248,116,160,0.55)");
+        g.addColorStop(0.5, "rgba(248,116,160,0.22)");
+        g.addColorStop(1, "rgba(248,116,160,0)");
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, 256, 256);
+      }
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      const glowMaterial = new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        depthWrite: false,
+        toneMapped: false,
+        blending: THREE.AdditiveBlending,
+        opacity: 0,
+      });
+      const glow = new THREE.Mesh(planeGeometry, glowMaterial);
+      glow.renderOrder = -3;
+      glow.position.z = -0.05;
+      item.group.add(glow);
+      disposables.push(texture, glowMaterial);
+      item.glow = { mesh: glow, material: glowMaterial };
+    }
 
     if (browserUrl !== undefined) {
       // The window sits just behind the video; redrawn whenever the video's shape is known.
@@ -674,9 +741,11 @@ export async function createJourneyScene(
       text.color = block.color ?? 0xffffff;
       text.anchorX = "left";
       text.anchorY = "top-cap";
-      text.textAlign = "left";
+      // A centred caption (title only, no x position) centres its lines if it ever wraps.
+      const centredCaption = role === "title" && !block.paragraphs?.length && block.desktop.x === undefined;
+      text.textAlign = centredCaption ? "center" : "left";
       text.overflowWrap = "break-word";
-      if (block.shadow && role !== "lead") {
+      if (block.shadow && role !== "lead" && role !== "bold") {
         // Figma text-shadow 0 6px 17px rgba(0,0,0,0.35), as a soft offset blur.
         text.outlineWidth = 0;
         text.outlineBlur = "35%";
@@ -684,24 +753,64 @@ export async function createJourneyScene(
         text.outlineColor = 0x000000;
         text.outlineOpacity = 0.35;
       }
-      if (role === "lead") {
+      if (role === "lead" || role === "bold") {
         text.outlineWidth = FAUX_BOLD;
         text.outlineColor = block.color ?? 0xffffff;
         text.renderOrder = 1;
       }
       item.group.add(text);
       disposables.push(text);
-      item.parts.push({ text, role, para, bullet, base: { x: 0, y: 0 } });
+      item.parts.push({ text, role, para, bullet, base: { x: 0, y: 0 }, full: value });
     };
 
-    if (block.title) add(block.title, 700, "title", -1);
+    if (block.pointer) {
+      // Doodle arrow (a swoosh with a little loop, then down into an arrowhead), drawn once at 4x.
+      const canvas = document.createElement("canvas");
+      canvas.width = ARROW.w * 4;
+      canvas.height = ARROW.h * 4;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.scale(4, 4);
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 1.8;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.stroke(new Path2D(ARROW.path));
+        ctx.stroke(new Path2D(ARROW.head));
+      }
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, toneMapped: false });
+      const mesh = new THREE.Mesh(planeGeometry, material);
+      mesh.visible = false;
+      item.group.add(mesh);
+      disposables.push(texture, material);
+      item.arrow = { mesh, material };
+    }
+
+    // Section headings show in capitals (Figma "THE SPARK"); opening "statement" lines as written.
+    if (block.title) add(block.titleStyle === "statement" ? block.title : block.title.toUpperCase(), 700, "title", -1);
     block.paragraphs?.forEach((paragraph, index) => {
       if (typeof paragraph === "string") {
         add(paragraph, block.weight ?? 400, "para", index);
         return;
       }
-      add(`${paragraph.lead ?? ""}${paragraph.text}`, 400, "para", index);
+      const full = `${paragraph.lead ?? ""}${paragraph.text}`;
+      add(full, 400, "para", index);
       if (paragraph.lead) add(paragraph.lead, 400, "lead", index);
+      // Bold phrases mid-sentence: faux-bold copies of the whole paragraph (identical layout),
+      // each clipped after layout to one line of the phrase — up to 3 lines per phrase.
+      paragraph.bold?.forEach((phrase) => {
+        const start = full.indexOf(phrase);
+        if (start < 0) return;
+        for (let segment = 0; segment < 3; segment++) {
+          add(full, 400, "bold", index);
+          const part = item.parts[item.parts.length - 1];
+          part.boldRange = { start, end: start + phrase.length, segment };
+          part.text.visible = false;
+        }
+      });
       if (paragraph.marker) add(paragraph.marker, 700, "marker", index, paragraph.marker === "•");
     });
   };
@@ -735,9 +844,11 @@ export async function createJourneyScene(
         layerScale: 1,
         gapAligned: false,
         textOpacity: -1,
+        typed: -1,
         screen: null,
         playing: false,
         atRest: false,
+        heard: false,
         enter,
         exit,
         spin: block.spin ?? 1,
@@ -752,7 +863,13 @@ export async function createJourneyScene(
       } else if (block.kind === "image") {
         createImage(item, block.src, block.fallbackText);
       } else if (block.kind === "video" && (block.frame === "flat" || block.frame === "browser")) {
-        createFlatVideo(item, block.poster, block.src, block.frame === "browser" ? (block.url ?? "") : undefined);
+        createFlatVideo(
+          item,
+          block.poster,
+          block.src,
+          block.frame === "browser" ? (block.url ?? "") : undefined,
+          block.highlight === true,
+        );
       } else if (block.kind === "video" && source) {
         const phone = createPhone();
         group.add(phone.object);
@@ -839,10 +956,36 @@ export async function createJourneyScene(
     const maxWidth = place.w * unit;
     const listed = new Set(item.parts.filter((p) => p.role === "marker").map((p) => p.para));
 
+    // Typewriter: measure and centre with the whole line, never a half-typed one. Typing pauses
+    // (typed = -2) until the measurement below has finished.
+    if (block.typewriter) {
+      item.parts.forEach((part) => (part.text.text = part.full));
+      item.typed = -2;
+    }
+
+    // Title: optionally larger than the paragraphs, with its own line height (same tracking ratio).
+    const titleScale = block.titleScale ?? 1;
+    const titleLeading = block.titleLeading ?? typo.line / typo.size;
+    // Only blocks that set a title size/leading get their own title line height; others keep
+    // stacking exactly as before.
+    const titleLineH =
+      block.titleScale !== undefined || block.titleLeading !== undefined
+        ? typo.size * (block.scale ?? 1) * titleScale * titleLeading * unit
+        : lineH;
+
     item.parts.forEach(({ text, role, para }) => {
-      text.fontSize = typo.size * unit * (block.scale ?? 1);
-      text.letterSpacing = typo.tracking / typo.size;
-      text.lineHeight = typo.line / typo.size;
+      const isTitle = role === "title";
+      text.fontSize = typo.size * unit * (block.scale ?? 1) * (isTitle ? titleScale : 1);
+      // Section headings: wide tracking (Figma 10.08px at 24px); everything else the standard 5.52px.
+      text.letterSpacing =
+        isTitle && block.titleTracking !== undefined
+          ? block.titleTracking
+          : isTitle && block.titleStyle !== "statement"
+            ? HEADING_TRACKING
+            : !isTitle && block.tracking !== undefined
+              ? block.tracking
+              : typo.tracking / typo.size;
+      text.lineHeight = isTitle ? titleLeading : typo.line / typo.size;
       text.maxWidth = role === "marker" ? Infinity : maxWidth - (listed.has(para) ? list.indent * unit : 0);
     });
 
@@ -850,9 +993,9 @@ export async function createJourneyScene(
     Promise.all(item.parts.map(({ text }) => synced(text))).then(() => {
       if (disposed || id !== item.layoutId) return;
 
-      const lines = (text: Text) => {
+      const lines = (text: Text, height = lineH) => {
         const b = text.textRenderInfo?.blockBounds;
-        return b ? Math.max(1, Math.round((b[3] - b[1]) / lineH)) : 1;
+        return b ? Math.max(1, Math.round((b[3] - b[1]) / height)) : 1;
       };
 
       // Stack title and paragraphs with one blank line between them, like the Figma frames.
@@ -860,7 +1003,7 @@ export async function createJourneyScene(
       const title = item.parts.find((p) => p.role === "title");
       if (title) {
         title.text.position.set(0, 0, 0);
-        y -= (lines(title.text) + (block.titleGap ?? 1)) * lineH;
+        y -= lines(title.text, titleLineH) * titleLineH + (block.titleGap ?? 1) * lineH;
       }
       const paragraphs = [...new Set(item.parts.filter((p) => p.para >= 0).map((p) => p.para))].sort((a, b) => a - b);
       paragraphs.forEach((index) => {
@@ -903,6 +1046,42 @@ export async function createJourneyScene(
         part.base = { x: part.text.position.x, y: part.text.position.y };
       });
       item.scattered = false;
+      if (item.typed === -2) item.typed = -1;
+
+      // Bold phrases: clip each faux-bold copy to one line of its phrase (local text coords).
+      item.parts.forEach((part) => {
+        const range = part.boldRange;
+        if (!range) return;
+        const carets = part.text.textRenderInfo?.caretPositions;
+        if (!carets) return;
+        const lines: { x0: number; x1: number; bottom: number; top: number }[] = [];
+        for (let i = range.start; i < range.end; i++) {
+          const [x0, x1, bottom, top] = [carets[i * 4], carets[i * 4 + 1], carets[i * 4 + 2], carets[i * 4 + 3]];
+          const line = lines.find((l) => Math.abs(l.bottom - bottom) < 1e-4);
+          if (line) {
+            line.x0 = Math.min(line.x0, x0, x1);
+            line.x1 = Math.max(line.x1, x0, x1);
+          } else {
+            lines.push({ x0: Math.min(x0, x1), x1: Math.max(x0, x1), bottom, top });
+          }
+        }
+        const line = lines[range.segment];
+        part.text.visible = Boolean(line);
+        if (!line) return;
+        const pad = part.text.fontSize * 0.08;
+        part.text.clipRect = [line.x0 - pad, line.bottom - pad, line.x1 + pad, line.top + pad];
+      });
+
+      if (item.arrow) {
+        // The arrow's tail sits a small gap after the line's last letter, level with the line's
+        // middle (the parts are centred on the group, so the line ends at maxX - cx).
+        // Half size on phones, so it fits beside the line on a narrow screen.
+        const a = unit * (mobile ? 0.5 : 1);
+        const tailX = maxX - cx + ARROW.gap * a;
+        item.arrow.mesh.scale.set(ARROW.w * a, ARROW.h * a, 1);
+        item.arrow.mesh.position.set(tailX + (ARROW.w / 2 - ARROW.tail.x) * a, (ARROW.tail.y - ARROW.h / 2) * a, 0);
+        item.arrow.mesh.visible = true;
+      }
 
       // Scatter pieces: the title and each paragraph (with its marker and lead).
       const groups = [...new Set(item.parts.map((p) => p.para))].sort((a, b) => a - b);
@@ -1010,6 +1189,8 @@ export async function createJourneyScene(
         child?.position.set(0, -(bar / 2), 0);
         item.half = { x: totalW / 2, y: totalH / 2 };
       }
+      // Glow: wider and taller than the panel, so the light spills out around every edge.
+      item.glow?.mesh.scale.set(item.half.x * 2 * 1.18, item.half.y * 2 * 1.32, 1);
     } else {
       child?.scale.setScalar(height);
       item.rest.ry = (media as { tilt?: number }).tilt ?? 0;
@@ -1069,10 +1250,16 @@ export async function createJourneyScene(
     items.forEach((item) => {
       const video = item.video;
       if (!video) return;
-      if (item.playing && item.shown && isCaseVideoReady(video)) {
+      // Silent videos are told to play straight away: browsers often won't buffer enough to count as
+      // "ready" until play() is called, so waiting for ready could leave them stuck on the poster.
+      // (The poster stays up until the video is genuinely moving — see below.)
+      const silentBlock = item.block.kind === "video" && item.block.sound === false;
+      if (item.playing && item.shown && (isCaseVideoReady(video) || silentBlock)) {
         // Sound on while the phone is active in the centre; muted on the way out.
         const silent =
-          !(item.atRest && item.scene === current) || muted || (item.block.kind === "video" && item.block.sound === false);
+          !((item.atRest && item.scene === current) || item.heard) ||
+          muted ||
+          (item.block.kind === "video" && item.block.sound === false);
         if (video.muted !== silent) {
           video.muted = silent;
           if (!silent) {
@@ -1088,7 +1275,11 @@ export async function createJourneyScene(
             if ((error as { name?: string })?.name === "NotAllowedError" && !video.muted) blockSound(video);
           });
         }
-        if (item.screen && item.videoTexture && item.screen.map !== item.videoTexture && video.readyState >= 2) {
+        // Keep the poster (thumbnail) up until the video is genuinely playing — not just when its
+        // first frame has decoded. Big files decode frame one long before they can play, and
+        // swapping then replaced the poster with a frozen opening frame.
+        const playingNow = !video.paused && video.readyState >= 3 && video.currentTime > 0.05;
+        if (item.screen && item.videoTexture && item.screen.map !== item.videoTexture && playingNow) {
           showOnScreen(item.screen, item.videoTexture);
         }
       } else if (!video.paused) {
@@ -1221,6 +1412,11 @@ export async function createJourneyScene(
 
       const tanHalf = Math.tan((camera.fov * Math.PI) / 360);
       let sound = false;
+      // A full-screen backdrop on screen covers everything from later slides (they'd otherwise
+      // show faintly through it while fading in from the distance). Items run in scene order,
+      // so the backdrop is seen before the slides behind it.
+      let cover = 0;
+      let coverScene = Infinity;
 
       items.forEach((item) => {
         const u = q - item.scene;
@@ -1235,6 +1431,7 @@ export async function createJourneyScene(
           item.group.visible = false;
           item.shown = false;
           item.atRest = false;
+          item.heard = false;
           item.playing = false;
         };
 
@@ -1277,6 +1474,13 @@ export async function createJourneyScene(
             opacity = clamp((inFar - dist) / (inFar - inNear), 0, 1);
             const [far, near] = JOURNEY.backdropNear;
             opacity *= clamp((camZ - rest.z - near) / (far - near), 0, 1);
+            if (opacity > cover) {
+              cover = opacity;
+              coverScene = Math.min(coverScene, item.scene);
+            }
+          } else if (item.scene > coverScene) {
+            // Later slides stay hidden behind the backdrop, fading in as it fades away.
+            opacity *= 1 - cover;
           }
           const inPath =
             !isBackdrop &&
@@ -1329,6 +1533,8 @@ export async function createJourneyScene(
           );
           if (item.fader) {
             setOpacity(item.fader, opacity);
+            // Highlight glow: follows the fade, with a slow breathing pulse.
+            if (item.glow) item.glow.material.opacity = opacity * (0.45 + 0.12 * Math.sin(time * 1.3));
             item.shown = item.group.visible;
           } else {
             item.group.visible = true;
@@ -1340,13 +1546,44 @@ export async function createJourneyScene(
                 text.outlineOpacity = opacity * (item.block.kind === "text" && item.block.shadow ? 0.35 : 1);
               });
             }
+            if (item.block.kind === "text" && item.block.typewriter && item.typed !== -2 && item.parts.length > 0) {
+              // Type the line out as it arrives, un-type it as it leaves; the letters themselves
+              // stay solid (quick fade only at the very start), so it reads as typing, not fading.
+              const typedShare = clamp((opacity - 0.04) / 0.86, 0, 1);
+              const total = item.parts.reduce((sum, part) => sum + part.full.length, 0);
+              const count = Math.round(total * typedShare);
+              if (count !== item.typed) {
+                item.typed = count;
+                let left = count;
+                item.parts.forEach((part) => {
+                  part.text.text = part.full.slice(0, Math.max(0, left));
+                  left -= part.full.length;
+                });
+              }
+              const solid = Math.min(1, opacity * 6);
+              item.parts.forEach(({ text }) => (text.fillOpacity = solid));
+            }
+            if (item.arrow) {
+              // With a typewriter the arrow lands right after the last letter; otherwise it fades with the text.
+              const typing = item.block.kind === "text" && item.block.typewriter;
+              const done = typing ? clamp((opacity - 0.04) / 0.86, 0, 1) : 1;
+              item.arrow.material.opacity = (typing ? clamp((done - 0.9) / 0.1, 0, 1) : 1) * opacity;
+            }
           }
           // Videos play with sound while their scene is the one in front of the camera.
           // …and are muted (sound button hidden) as soon as they start drifting out.
           item.atRest = opacity >= 0.999 && item.scene === nearest && past === 0 && ahead < reading + 12;
-          if (item.atRest) item.playing = true;
           const hasSound = item.block.kind === "video" && item.block.sound !== false;
-          if (item.video && hasSound && item.atRest) sound = true;
+          // A video that is on screen loads now, ahead of the background queue (which downloads one
+          // whole file at a time) — otherwise it can sit on its poster behind a big download.
+          if (item.video && item.shown && item.block.kind === "video" && item.block.src) loadCaseVideo(item.block.src, true);
+          // Silent videos (no sound button) play as soon as they start to appear: in a step-by-step
+          // gallery they fade in gradually from deep behind and may never reach "at rest".
+          if (item.atRest || (item.video && !hasSound && item.shown && opacity > 0.05)) item.playing = true;
+          // Once a sound video has reached the centre, keep its sound and the sound button until it
+          // is off screen (hide() resets this), instead of dropping them as soon as it starts leaving.
+          if (item.video && hasSound && item.atRest) item.heard = true;
+          if (item.video && hasSound && item.heard && item.shown) sound = true;
           return;
         }
 
@@ -1574,6 +1811,7 @@ export async function createJourneyScene(
           // Media: 0% → 100% on the way in, 100% → 0% on the way out.
           const arriving = entering && item.fxIn === "pipe" ? clamp(e / 0.6, 0, 1) : e;
           setOpacity(item.fader, entering ? arriving : 1 - x);
+          if (item.glow) item.glow.material.opacity = (entering ? arriving : 1 - x) * (0.45 + 0.12 * Math.sin(time * 1.3));
           item.shown = item.group.visible;
         } else {
           // Text: always fully opaque.

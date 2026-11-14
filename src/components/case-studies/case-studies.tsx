@@ -211,7 +211,7 @@ export function CaseStudies({ studies }: { studies: CaseStudy[] }) {
           });
         }
 
-        // Only while a video plays in the centre; hidden as soon as its slide starts leaving.
+        // From when a sound video reaches the centre until it has left the screen.
         const soundValue = docked && status?.sound ? 1 : 0;
         if (sound && Math.abs(soundValue - motion.sound) > 0.003) {
           motion.sound = soundValue;

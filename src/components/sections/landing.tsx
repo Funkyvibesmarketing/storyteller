@@ -38,19 +38,29 @@ export function Landing() {
           .to(".landing-move", { opacity: 0, duration: 0.3, ease: "power1.in" }, 0.7);
       });
 
-      // When the note rests in the centre, give first-time visitors a peek at the menu.
-      let previewed = false;
-      ScrollTrigger.create({
+      // Client (Figma): the "Case Studies" wording and the open menu appear on this screen, and
+      // disappear as you scroll on — shown while the note is in (it settles at ~0.35) until it
+      // starts zooming away (0.55). Every visit, both scroll directions.
+      let showing = false;
+      const setMenu = (show: boolean) => {
+        if (show === showing) return;
+        showing = show;
+        window.dispatchEvent(new CustomEvent("menupreview", { detail: show }));
+      };
+      const trigger = ScrollTrigger.create({
         trigger: root.current,
         start: "top bottom",
         end: "bottom bottom",
-        onUpdate: (self) => {
-          if (previewed || self.progress < 0.35 || self.progress > 0.55) return;
-          previewed = true;
-          window.dispatchEvent(new CustomEvent("menupreview"));
+        onUpdate: (self) => setMenu(self.progress >= 0.25 && self.progress < 0.55),
+        onToggle: (self) => {
+          if (!self.isActive) setMenu(false);
         },
       });
-      return () => mm.revert();
+      return () => {
+        setMenu(false);
+        trigger.kill();
+        mm.revert();
+      };
     },
     { scope: root },
   );
@@ -64,7 +74,8 @@ export function Landing() {
     <Section ref={root} aria-label="Introduction" className="h-[260svh]">
       <div className="sticky top-0 grid h-svh place-items-center overflow-hidden text-white">
         <div className="landing-move will-change-transform">
-          <p className="text-center text-[clamp(0.75rem,0.6rem+0.55vw,1.375rem)] font-normal leading-none tracking-[0.2em] [text-box:trim-both_cap_alphabetic]">
+          {/* Figma (amended): Montserrat 20px / 400, uppercase, 8.2px letter-spacing (0.41em). */}
+          <p className="text-center text-[clamp(0.75rem,0.6rem+0.55vw,1.375rem)] font-normal uppercase leading-none tracking-[0.41em] [text-box:trim-both_cap_alphabetic]">
             Not for onward distribution
           </p>
         </div>

@@ -42,8 +42,11 @@ next-env.d.ts
 
 !.env.example
 
-# videos are hosted on Cloudinary
-public/video/
+# Videos: large source files stay out of git (case studies stream from Cloudinary); the
+# web-ready copies the site plays locally (service cards + two case-study videos) are included.
+public/video/*
+!public/video/services/
+!public/video/web/
 
 # Figma frame exports used as design reference (not part of the site)
 /design-reference/

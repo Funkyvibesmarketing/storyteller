@@ -14,13 +14,15 @@ import { ScrollHintLabel } from "@/components/ui/scroll-hint-label";
  * -> 1 just passed (bottom-left, cropped) -> 2 gone past the viewer.
  * x / y are fractions of the viewport width / height from the centre.
  */
+// In focus (slot 0) the card sits perfectly straight and centred — no tilt or offset — while it
+// still angles on the way in and out.
 const KEYS = {
   x: [0.56, 0.28, 0, -0.44, -0.9],
-  y: [-0.5, -0.3, -0.02, 0.3, 0.62],
+  y: [-0.5, -0.3, 0, 0.3, 0.62],
   scale: [0.2, 0.5, 1, 1.15, 1.7],
-  rotZ: [4, 2.5, 2, 1.5, 0],
-  rotY: [-26, -16, -5, 14, 26],
-  rotX: [10, 7, 4, 0, -6],
+  rotZ: [4, 2.5, 0, 1.5, 0],
+  rotY: [-26, -16, 0, 14, 26],
+  rotX: [10, 7, 0, 0, -6],
   opacity: [0, 1, 1, 1, 0],
 };
 
@@ -206,9 +208,9 @@ export function Services() {
         className={`relative min-h-svh overflow-hidden text-white [perspective:1000px] group-data-[animated=true]/services:sticky group-data-[animated=true]/services:top-0 group-data-[animated=true]/services:h-svh`}
       >
         <p
-          className={`services-intro pointer-events-none relative z-[2] pt-24 text-center text-[clamp(0.75rem,0.6rem+0.55vw,1.375rem)] font-normal leading-none tracking-[0.2em] [text-box:trim-both_cap_alphabetic] group-data-[animated=true]/services:absolute group-data-[animated=true]/services:left-1/2 group-data-[animated=true]/services:top-1/2 group-data-[animated=true]/services:-translate-x-1/2 group-data-[animated=true]/services:pt-0 group-data-[animated=true]/services:opacity-0`}
+          className={`services-intro pointer-events-none relative z-[2] whitespace-nowrap pt-24 text-center text-[clamp(1.125rem,0.6rem+1.17vw,2.5rem)] font-bold uppercase leading-none tracking-[0.15em] [text-box:trim-both_cap_alphabetic] group-data-[animated=true]/services:absolute group-data-[animated=true]/services:left-1/2 group-data-[animated=true]/services:top-1/2 group-data-[animated=true]/services:-translate-x-1/2 group-data-[animated=true]/services:pt-0 group-data-[animated=true]/services:opacity-0`}
         >
-          we&rsquo;ll tell stories through&hellip;
+          We tell stories through...
         </p>
         {/* Readable section heading for search engines and screen readers (the cards are drawn in WebGL). */}
         <h2 className="sr-only">Our services: {services.map((s) => s.lines.join(" ").replace(/&(\S)/, "& $1")).join(", ")}</h2>

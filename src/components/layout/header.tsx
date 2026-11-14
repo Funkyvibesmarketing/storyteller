@@ -20,33 +20,25 @@ export function Header() {
     return () => window.removeEventListener("journeycase", onCase);
   }, []);
 
-  // First visit only: open the menu by itself for a moment so people see the case
-  // studies are in there, then close it again — unless they start using it.
+  // Landing screen ("Not for onward distribution"): the "Case Studies" label and the open menu
+  // show while that screen is up, and close again as you scroll on — unless the visitor has
+  // started using the menu themselves. The Landing section sends `menupreview` (true / false).
   const [preview, setPreview] = useState(false);
   const touched = useRef(false);
   useEffect(() => {
-    const PREVIEW_KEY = "storyteller:menu-previewed";
-    let timer = 0;
-    const onPreview = () => {
-      try {
-        if (localStorage.getItem(PREVIEW_KEY)) return;
-        localStorage.setItem(PREVIEW_KEY, "1");
-      } catch {
-        // Storage blocked — still show the preview once for this page view.
-      }
-      touched.current = false;
-      setPreview(true);
-      setOpen(true);
-      timer = window.setTimeout(() => {
+    const onPreview = (event: Event) => {
+      const show = (event as CustomEvent<boolean>).detail === true;
+      if (show) {
+        touched.current = false;
+        setPreview(true);
+        setOpen(true);
+      } else {
         setPreview(false);
         if (!touched.current) setOpen(false);
-      }, 3500);
+      }
     };
     window.addEventListener("menupreview", onPreview);
-    return () => {
-      window.removeEventListener("menupreview", onPreview);
-      window.clearTimeout(timer);
-    };
+    return () => window.removeEventListener("menupreview", onPreview);
   }, []);
   const highlighted = preview && current < 0 ? 0 : current;
   const menu = useRef<HTMLDivElement>(null);
@@ -146,7 +138,8 @@ export function Header() {
             Case Studies
           </p>
           <nav aria-label="Case studies">
-            <ul>
+            {/* A little breathing room between the items. */}
+            <ul className="grid gap-[clamp(0.25rem,0.36vw,0.5rem)]">
               {caseStudies.map((study, i) => (
                 <li key={study.slug}>
                   <TransitionLink
@@ -158,7 +151,8 @@ export function Header() {
                       i === highlighted ? "bg-white text-[#6b1d6e]" : "hover:bg-white hover:text-[#6b1d6e]",
                     )}
                   >
-                    <span className="flex-1 whitespace-nowrap [text-box:trim-both_cap_alphabetic]">
+                    {/* Figma: case study names in capitals ("01 HY CONVEYANCING"). */}
+                    <span className="flex-1 whitespace-nowrap uppercase [text-box:trim-both_cap_alphabetic]">
                       {String(i + 1).padStart(2, "0")} {study.client}
                     </span>
                     <span

@@ -22,7 +22,13 @@ declare module "troika-three-text" {
     outlineOffsetY: number | string;
     depthOffset: number;
     sdfGlyphSize: number | null;
-    textRenderInfo: { blockBounds: [number, number, number, number] } | null;
+    /** Only draw glyphs inside [minX, minY, maxX, maxY] (local coords). */
+    clipRect: [number, number, number, number] | null;
+    textRenderInfo: {
+      blockBounds: [number, number, number, number];
+      /** Per character: start x, end x, bottom y, top y (local coords). */
+      caretPositions?: Float32Array;
+    } | null;
     sync(callback?: () => void): void;
     dispose(): void;
   }

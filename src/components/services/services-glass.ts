@@ -45,6 +45,8 @@ uniform vec2 uMouse;
 uniform vec2 uSize;
 uniform float uUnit;
 uniform float uPhone;
+// 1 = the card in focus: no slant, perfectly front-on. 0 = full slant while flying.
+uniform float uFlat;
 
 varying vec2 vUv;
 varying float vBackface;
@@ -60,11 +62,11 @@ void main() {
   vec2 n = pos.xy / uSize;
 
   pos.z += (sin(uTime * 0.5 + abs(n.x) * 3.0) * 0.1 + uHover * 0.2) * uUnit;
-  pos.y -= n.x * mix(0.08, 0.14, uPhone) * uUnit;
+  pos.y -= n.x * mix(0.08, 0.14, uPhone) * uUnit * (1.0 - uFlat);
   pos.x -= (uMouse.x - 0.5) * 0.03 * uUnit;
 
   vUv = n + 0.5;
-  vUv.y += n.x * mix(0.08, 0.2, uPhone) * 0.2;
+  vUv.y += n.x * mix(0.08, 0.2, uPhone) * 0.2 * (1.0 - uFlat);
 
   vNormal = normalMatrix * normal;
   vViewDir = -vec3(modelViewMatrix * vec4(pos, 1.0)) / uUnit;
@@ -269,6 +271,8 @@ uniform vec2 uMouse;
 uniform vec2 uSize;
 uniform float uUnit;
 uniform float uPhone;
+// 1 = the card in focus: no slant, perfectly front-on. 0 = full slant while flying.
+uniform float uFlat;
 uniform float uLift;
 
 varying vec2 vUv;
@@ -278,7 +282,7 @@ void main() {
   vec2 n = pos.xy / uSize;
 
   pos.z += (sin(uTime * 0.5 + abs(n.x) * 3.0) * 0.1 + uHover * 0.2) * uUnit + uLift;
-  pos.y -= n.x * mix(0.08, 0.14, uPhone) * uUnit;
+  pos.y -= n.x * mix(0.08, 0.14, uPhone) * uUnit * (1.0 - uFlat);
   pos.x -= (uMouse.x - 0.5) * 0.03 * uUnit;
 
   vUv = uv;
@@ -517,6 +521,7 @@ export function createServicesGlass(opts: {
       uColor: { value: new THREE.Color(tints[index % tints.length]) },
       uOpacity: { value: 1 },
       uPass: { value: 0 },
+      uFlat: { value: 0 },
     };
     const material = new THREE.ShaderMaterial({
       vertexShader: PANE_VS,
@@ -537,6 +542,7 @@ export function createServicesGlass(opts: {
     const textUniforms: Record<string, THREE.IUniform> = {
       uTime: shared.uTime,
       uPhone: shared.uPhone,
+      uFlat: uniforms.uFlat,
       uHover: uniforms.uHover,
       uMouse: uniforms.uMouse,
       uSize: uniforms.uSize,
@@ -762,7 +768,10 @@ export function createServicesGlass(opts: {
       const facing = e[10] / Math.hypot(e[8], e[9], e[10]);
       p.textUniforms.uGlitch.value = 0;
       p.textUniforms.uOpacity.value = opacity * (facing > 0 ? 1 : 0);
-      p.textUniforms.uFocus.value = parseFloat(p.el.dataset.focus ?? "1");
+      const focus = parseFloat(p.el.dataset.focus ?? "1");
+      p.textUniforms.uFocus.value = focus;
+      // The card in focus faces straight on (no slant); the slant returns as it flies off.
+      p.uniforms.uFlat.value = focus;
       drawTitle(p);
 
       const media = p.media;
