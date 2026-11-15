@@ -880,7 +880,8 @@ export async function createJourneyScene(
           item.video = getCaseVideo(block.src);
           item.videoTexture = createVideoTexture(item.video);
         }
-        textureLoader.load(block.poster, (texture) => {
+        // No poster yet (e.g. a video still to come): the phone keeps its black screen.
+        if (block.poster) textureLoader.load(block.poster, (texture) => {
           if (disposed || !item.screen) return;
           prepareScreenTexture(texture);
           const image = texture.image as { width: number; height: number };
@@ -1246,6 +1247,13 @@ export async function createJourneyScene(
   };
 
   let current = -1;
+  /**
+   * The one video allowed to be heard (and show the sound button): the latest sound video to
+   * reach the front. A newer one takes over, so two never talk at once; cleared when it's hidden.
+   */
+  let soundOwner: Item | null = null;
+  /** Gallery-style blocks (long `fade` from deep behind) may never reach the strict "at rest". */
+  const isGallery = (item: Item) => item.block.kind === "video" && item.block.fade !== undefined;
   const syncVideos = () => {
     items.forEach((item) => {
       const video = item.video;
@@ -1253,13 +1261,10 @@ export async function createJourneyScene(
       // Silent videos are told to play straight away: browsers often won't buffer enough to count as
       // "ready" until play() is called, so waiting for ready could leave them stuck on the poster.
       // (The poster stays up until the video is genuinely moving — see below.)
-      const silentBlock = item.block.kind === "video" && item.block.sound === false;
+      const silentBlock = (item.block.kind === "video" && item.block.sound === false) || isGallery(item);
       if (item.playing && item.shown && (isCaseVideoReady(video) || silentBlock)) {
-        // Sound on while the phone is active in the centre; muted on the way out.
-        const silent =
-          !((item.atRest && item.scene === current) || item.heard) ||
-          muted ||
-          (item.block.kind === "video" && item.block.sound === false);
+        // Only the current sound owner is heard; everything else plays muted.
+        const silent = item !== soundOwner || muted || (item.block.kind === "video" && item.block.sound === false);
         if (video.muted !== silent) {
           video.muted = silent;
           if (!silent) {
@@ -1433,6 +1438,7 @@ export async function createJourneyScene(
           item.atRest = false;
           item.heard = false;
           item.playing = false;
+          if (soundOwner === item) soundOwner = null;
         };
 
         if (fly) {
@@ -1579,11 +1585,18 @@ export async function createJourneyScene(
           if (item.video && item.shown && item.block.kind === "video" && item.block.src) loadCaseVideo(item.block.src, true);
           // Silent videos (no sound button) play as soon as they start to appear: in a step-by-step
           // gallery they fade in gradually from deep behind and may never reach "at rest".
-          if (item.atRest || (item.video && !hasSound && item.shown && opacity > 0.05)) item.playing = true;
-          // Once a sound video has reached the centre, keep its sound and the sound button until it
-          // is off screen (hide() resets this), instead of dropping them as soon as it starts leaving.
-          if (item.video && hasSound && item.atRest) item.heard = true;
-          if (item.video && hasSound && item.heard && item.shown) sound = true;
+          // Gallery videos (with or without sound) too — they start muted until they take the sound.
+          if (item.atRest || (item.video && (!hasSound || isGallery(item)) && item.shown && opacity > 0.05)) {
+            item.playing = true;
+          }
+          // A sound video takes the sound (and the sound button) when it reaches the centre — gallery
+          // ones once almost solid on the current slide — and keeps it until it leaves the screen or a
+          // newer one takes over.
+          const arrived = item.atRest || (isGallery(item) && opacity >= 0.95 && item.scene === nearest);
+          if (item.video && hasSound && arrived && !item.heard) {
+            item.heard = true;
+            soundOwner = item;
+          }
           return;
         }
 
@@ -1823,9 +1836,14 @@ export async function createJourneyScene(
         item.atRest = !entering && x <= 0;
         if (item.atRest) item.playing = true;
         const hasSound = item.block.kind === "video" && item.block.sound !== false;
-        if (item.video && hasSound && item.atRest && item.scene === nearest) sound = true;
+        if (item.video && hasSound && item.atRest && item.scene === nearest && !item.heard) {
+          item.heard = true;
+          soundOwner = item;
+        }
       });
 
+      // Sound button: while the current sound owner is on screen.
+      if (soundOwner?.shown) sound = true;
       syncVideos();
       renderer.render(scene, camera);
 

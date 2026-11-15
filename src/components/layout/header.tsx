@@ -132,7 +132,7 @@ export function Header() {
           ref={panel}
           id="case-study-menu"
           inert={!open}
-          className="invisible absolute right-0 top-full mt-[clamp(0.5rem,0.8vw,1rem)] w-[clamp(15rem,20vw,26rem)] max-w-[calc(100vw-2.75rem)] origin-top-right rounded-xl border border-white/40 bg-white/10 p-[clamp(0.375rem,0.45vw,0.625rem)] shadow-[0_18px_40px_0_rgba(0,0,0,0.25)] backdrop-blur-xl"
+          className="invisible absolute right-0 top-full mt-[clamp(0.5rem,0.8vw,1rem)] w-max min-w-[clamp(15rem,20vw,26rem)] max-w-[calc(100vw-2.75rem)] origin-top-right rounded-xl border border-white/40 bg-white/10 p-[clamp(0.375rem,0.45vw,0.625rem)] shadow-[0_18px_40px_0_rgba(0,0,0,0.25)] backdrop-blur-xl"
         >
           <p className="px-[clamp(0.375rem,0.45vw,0.625rem)] pb-[clamp(0.5rem,0.6vw,0.875rem)] pt-[clamp(0.25rem,0.3vw,0.5rem)] text-[clamp(0.625rem,0.6vw,0.875rem)] leading-none tracking-[0.2em] opacity-70">
             Case Studies
@@ -147,7 +147,7 @@ export function Header() {
                     onClick={() => setOpen(false)}
                     aria-current={i === current ? "true" : undefined}
                     className={cn(
-                      "case-link group flex items-center gap-3 rounded-md px-[clamp(0.375rem,0.45vw,0.625rem)] py-[clamp(0.5rem,0.6vw,0.875rem)] text-[clamp(0.8125rem,0.83vw,1.125rem)] leading-none tracking-[0.15em] transition-colors duration-300",
+                      "case-link group flex items-center gap-3 rounded-md px-[clamp(0.375rem,0.45vw,0.625rem)] py-[clamp(0.5rem,0.6vw,0.875rem)] text-[clamp(0.8125rem,0.83vw,1.125rem)] leading-none tracking-[0.15em] transition-colors duration-300 max-md:tracking-[0.1em]",
                       i === highlighted ? "bg-white text-[#6b1d6e]" : "hover:bg-white hover:text-[#6b1d6e]",
                     )}
                   >

@@ -498,7 +498,8 @@ export const caseStudies: CaseStudy[] = [
       },
       // 11–13 — Behind the scenes, one by one: the line stays in the middle while the kitchen
       // (left), the café (right) and the road (left) each arrive on their own slide, emerging from
-      // deep inside, and open out to their own side as the next one comes. Flat, muted, no sound button.
+      // deep inside, and open out to their own side as the next one comes. In the iPhone frame, with sound
+      // (the newest one to arrive is heard; sound button shown).
       {
         pace: 0.6,
         blocks: [
@@ -517,10 +518,9 @@ export const caseStudies: CaseStudy[] = [
           },
           {
             kind: "video",
-            frame: "flat",
+            frame: "phone",
             poster: `${HY}/posters/kitchen.jpg`,
             src: "https://res.cloudinary.com/aeh9u82k/video/upload/c_limit,w_1280,h_1280,fps_30,q_auto/v1794579727/HY_video_5-compressed.mp4",
-            sound: false,
             // Emerges from deep inside, fainter while far away.
             appear: -20,
             fade: 56,
@@ -536,10 +536,9 @@ export const caseStudies: CaseStudy[] = [
         blocks: [
           {
             kind: "video",
-            frame: "flat",
+            frame: "phone",
             poster: `${HY}/posters/cafe.jpg`,
             src: "https://res.cloudinary.com/aeh9u82k/video/upload/c_limit,w_1280,h_1280,fps_30,q_auto/v1794578952/HY_video_4-compressed.mp4",
-            sound: false,
             appear: -20,
             fade: 56,
             desktop: { x: 1410, y: 600, h: 520 },
@@ -553,12 +552,11 @@ export const caseStudies: CaseStudy[] = [
         pace: 0.6,
         blocks: [
           {
-            // Behind-the-scenes clip (IMG_4294, iPhone HDR → web copy 720x1280, 24fps, 3.3 MB).
+            // Behind-the-scenes street clip (IMG_4294), with sound, from Cloudinary.
             kind: "video",
-            frame: "flat",
+            frame: "phone",
             poster: `${HY}/posters/street.jpg`,
-            src: "/video/web/hy-conveyancing/street.mp4",
-            sound: false,
+            src: "https://res.cloudinary.com/aeh9u82k/video/upload/c_limit,w_1280,h_1280,fps_30,q_auto/v1794722068/IMG_4294_1.mp4",
             appear: -20,
             fade: 56,
             desktop: { x: 520, y: 500, h: 520 },
@@ -589,6 +587,42 @@ export const caseStudies: CaseStudy[] = [
             enter: "depth",
             exit: "right",
             fx: "roll",
+            fxOut: "auto",
+          },
+        ],
+      },
+      // 15 — Figma "Hy Group 15" (man in the street): extra phone video with sound (Ishtar: not the same as screens 4 & 7).
+      {
+        blocks: [
+          {
+            kind: "video",
+            frame: "phone",
+            poster: `${HY}/posters/street-walk.jpg`,
+            src: "https://res.cloudinary.com/aeh9u82k/video/upload/c_limit,w_1280,h_1280,fps_30,q_auto/v1794719922/HY_6_1.mp4",
+            desktop: { x: 960, y: 540, h: 728, tilt: 0.45 },
+            mobile: { x: 195, y: 410, h: 560 },
+            enter: "top",
+            exit: "bottom-left",
+            drift: 1.3,
+            fx: "auto",
+            fxOut: "auto",
+          },
+        ],
+      },
+      // 16 — Figma "Hy Group 16" (man by the window): extra phone video with sound (Ishtar: not the same as screens 4 & 7).
+      {
+        blocks: [
+          {
+            kind: "video",
+            frame: "phone",
+            poster: `${HY}/posters/window-umbrella.jpg`,
+            src: "https://res.cloudinary.com/aeh9u82k/video/upload/c_limit,w_1280,h_1280,fps_30,q_auto/v1794719992/HY_7_1.mp4",
+            desktop: { x: 960, y: 540, h: 728, tilt: 0.45 },
+            mobile: { x: 195, y: 410, h: 560 },
+            enter: "top",
+            exit: "bottom-right",
+            drift: 1.3,
+            fx: "auto",
             fxOut: "auto",
           },
         ],
@@ -919,23 +953,24 @@ export const caseStudies: CaseStudy[] = [
         ],
       },
       // 10 — Like the reference's beach scene: the burnt OUR STORY paper fills the screen far
-      // behind; "We developed each animation..." runs vertically through the middle and the
+      // behind; "WE DEVELOPED EACH ANIMATION" runs across the middle and the
       // camera flies through it, then the paper fades away as the camera nears it.
       {
         blocks: [
           {
             kind: "text",
-            paragraphs: ["We developed each animation..."],
-            rotate: 90,
+            // Figma (updated): horizontal, capitals, 32px / 600, 4.8px tracking, soft shadow; across
+            // the middle of the OUR STORY artwork.
+            paragraphs: ["WE DEVELOPED EACH ANIMATION"],
+            tracking: 4.8 / 32,
             // Appears first (small, the whole line visible), before the background, then zooms
             // up as you scroll. Fully in at ~42 units from the camera.
             appear: 8,
-            // Figma: Montserrat 32px / 600, 7.36px tracking, soft shadow.
             scale: 32 / 24,
             weight: 600,
             shadow: true,
             desktop: { w: 900 },
-            mobile: { w: 600 },
+            mobile: { w: 342 },
             enter: "depth",
             exit: "depth",
           },
@@ -1186,8 +1221,7 @@ export const caseStudies: CaseStudy[] = [
             // Soft pulsing pink glow behind the window, so the eye goes to the video.
             highlight: true,
             poster: `${GRIMM}/posters/our-story.jpg`,
-            // Local: web copy (1280x708, 30fps, 3.8 MB) of public/video/grimm-nd-co-last.mp4.
-            src: "/video/web/grimm-and-co/our-story-page.mp4",
+            src: "https://res.cloudinary.com/aeh9u82k/video/upload/c_limit,w_1280,h_1280,fps_30,q_auto/v1794721186/Our_Story_1.mp4",
             sound: false,
             desktop: { x: 953, y: 545, h: 700 },
             mobile: { x: 195, y: 410, h: 190 },
@@ -1430,8 +1464,7 @@ export const caseStudies: CaseStudy[] = [
             // Soft pulsing pink glow behind the window, so the eye goes to the video.
             highlight: true,
             poster: `${KYP}/posters/phone-photography.jpg`,
-            // Local: web copy (1280x800, 30fps, 5.2 MB) of public/video/KYP.mp4.
-            src: "/video/web/kyp/phone-photography-session.mp4",
+            src: "https://res.cloudinary.com/aeh9u82k/video/upload/c_limit,w_1280,h_1280,fps_30,q_auto/v1794721384/Built-in_Retina_Display_1.mp4",
             sound: false,
             desktop: { x: 960, y: 520, h: 560 },
             mobile: { x: 195, y: 422, h: 200 },
