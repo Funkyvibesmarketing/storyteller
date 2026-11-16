@@ -1239,11 +1239,25 @@ export async function createJourneyScene(
   };
   warm(0);
 
+  /**
+   * The browser refused sound (no click on the page yet). Keep the video playing muted for now —
+   * the button keeps saying "Sound off" — and switch the sound on by itself at the visitor's
+   * first click / tap / key press anywhere on the page.
+   */
+  let blocked = false;
+  const unlockEvents = ["pointerdown", "touchend", "keydown", "click"] as const;
+  const unlockSound = () => {
+    unlockEvents.forEach((name) => window.removeEventListener(name, unlockSound, true));
+    if (!blocked) return;
+    blocked = false;
+    syncVideos();
+  };
   const blockSound = (video: HTMLVideoElement) => {
-    muted = true;
     video.muted = true;
     video.play().catch(() => {});
-    options.onSoundBlocked?.();
+    if (blocked) return;
+    blocked = true;
+    unlockEvents.forEach((name) => window.addEventListener(name, unlockSound, true));
   };
 
   let current = -1;
@@ -1264,7 +1278,7 @@ export async function createJourneyScene(
       const silentBlock = (item.block.kind === "video" && item.block.sound === false) || isGallery(item);
       if (item.playing && item.shown && (isCaseVideoReady(video) || silentBlock)) {
         // Only the current sound owner is heard; everything else plays muted.
-        const silent = item !== soundOwner || muted || (item.block.kind === "video" && item.block.sound === false);
+        const silent = item !== soundOwner || muted || blocked || (item.block.kind === "video" && item.block.sound === false);
         if (video.muted !== silent) {
           video.muted = silent;
           if (!silent) {
@@ -1868,6 +1882,7 @@ export async function createJourneyScene(
     },
     dispose: () => {
       disposed = true;
+      unlockEvents.forEach((name) => window.removeEventListener(name, unlockSound, true));
       window.clearInterval(clock);
       items.forEach((item) => item.video?.pause());
       disposables.forEach((entry) => entry.dispose());

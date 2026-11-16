@@ -18,7 +18,7 @@ export function CaseStudies({ studies }: { studies: CaseStudy[] }) {
   const sceneRef = useRef<JourneyScene | null>(null);
   const activeRef = useRef(0);
   const [active, setActive] = useState(0);
-  // Videos play with sound by default while active (falls back to muted if the browser blocks it).
+  // Videos play with sound by default while active; the button starts as "Sound off".
   const [muted, setMuted] = useState(false);
   const mutedRef = useRef(muted);
   useEffect(() => {
@@ -95,7 +95,6 @@ export function CaseStudies({ studies }: { studies: CaseStudy[] }) {
 
       createJourneyScene(canvasEl, scenes, {
         muted: mutedRef.current,
-        onSoundBlocked: () => setMuted(true),
       }).then((scene) => {
         if (disposed) {
           scene?.dispose();
